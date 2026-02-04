@@ -1,29 +1,25 @@
 rss_feeds:
   - name: "Huberman Lab"
     url: "https://feeds.megaphone.fm/hubermanlab"
-  - name: "Feel Better Live more"
+  - name: "Feel Better Live More"
     url: "https://feeds.megaphone.fm/feelbetterlivemore"
   - name: "bike_shed"
-    url: 'https://bikeshed.thoughtbot.com/rss'
+    url: "https://bikeshed.thoughtbot.com/rss"
   - name: "on_rails"
-    url: 'https://feeds.buzzsprout.com/2462975.rss'
+    url: "https://feeds.buzzsprout.com/2462975.rss"
   - name: "remote_ruby"
-    url: 'https://feeds.buzzsprout.com/2260490.rss'
+    url: "https://feeds.buzzsprout.com/2260490.rss"
   - name: "ten_percent"
     url: "https://feeds.libsyn.com/570160/rss"
-  - name: "huberman"
-    url: "https://feeds.megaphone.fm/hubermanlab"
-  - name: "ceo"
-    url: "https://feeds.megaphone.fm/hubermanlab"
 
 download_dir: "~/Documents/news/podcasts/audio"
 transcript_dir: "~/Documents/news/podcasts/transcripts"
 summary_dir: "~/Documents/news/podcasts/summaries"
+db_path: "~/Documents/news/podcasts/podcast_agent.db"
+whisper_model: "base"
 max_episodes_per_day: 5
-fabric_pattern: "summarize"
-mcp_endpoint: null
 
-# AppleScript/macOS integration
+# macOS integration
 notifications_enabled: true
 speak_results: false
 show_completion_alert: false

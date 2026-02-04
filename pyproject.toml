@@ -9,11 +9,11 @@ dependencies = [
     "feedparser>=6.0.12",
     "openai-whisper>=20250625",
     "pydantic>=2.11.9",
+    "pydantic-ai>=0.1.0",
     "python-dotenv>=1.1.1",
     "pyyaml>=6.0.2",
     "requests>=2.32.5",
-    "schedule>=1.2.2",
-		"click>=8.3.0",
+    "click>=8.3.0",
 ]
 
 [tool.setuptools.dynamic]

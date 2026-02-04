@@ -8,3 +8,15 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Database
+*.db
+
+# Environment
+.env
+
+# Logs
+podcast_agent.log
+
+# Accidental home dir
+~/

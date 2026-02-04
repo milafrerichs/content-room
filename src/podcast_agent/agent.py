@@ -1,19 +1,21 @@
 import asyncio
 import logging
+import sqlite3
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
-import schedule
-import time
+import tempfile
+import subprocess
 
 import aiohttp
 import feedparser
 import whisper
 from pydantic import BaseModel
-import tempfile
-import subprocess
 
 from .models import AgentConfig, PodcastEpisode, PodcastFeed, ProcessingResult
+from .summarizer import summarize_transcript
+from . import db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,29 +45,25 @@ class PodcastAgent(BaseModel):
         self.config.transcript_dir.mkdir(parents=True, exist_ok=True)
         self.config.summary_dir.mkdir(parents=True, exist_ok=True)
 
-    def load_whisper_model(self, model_size: str = "base"):
+    def load_whisper_model(self):
         """Load Whisper model for transcription"""
         if not self.whisper_model:
-            logger.info(f"Loading Whisper model: {model_size}")
-            self.whisper_model = whisper.load_model(model_size)
+            logger.info(f"Loading Whisper model: {self.config.whisper_model}")
+            self.whisper_model = whisper.load_model(self.config.whisper_model)
 
     def run_applescript(self, script: str) -> str:
         """Run AppleScript command and return result"""
         try:
-            # Create temporary file for AppleScript
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".applescript", delete=False
             ) as f:
                 f.write(script)
                 script_path = f.name
 
-            # Run osascript command
             cmd = ["osascript", script_path]
             result = subprocess.run(cmd, capture_output=True, text=True)
 
-            # Clean up temporary file
             import os
-
             os.unlink(script_path)
 
             if result.returncode == 0:
@@ -92,16 +90,6 @@ class PodcastAgent(BaseModel):
         '''
         return self.run_applescript(script)
 
-    def open_folder(self, folder_path: str):
-        """Open folder in Finder"""
-        script = f'''
-        tell application "Finder"
-            open POSIX file "{folder_path}"
-            activate
-        end tell
-        '''
-        return self.run_applescript(script)
-
     def speak_text(self, text: str):
         """Use macOS text-to-speech"""
         script = f'''
@@ -113,7 +101,6 @@ class PodcastAgent(BaseModel):
         self, title: str, content: str, folder: str = "Podcast Summaries"
     ):
         """Save content to Apple Notes"""
-        # Escape quotes and special characters in content
         escaped_content = content.replace('"', '\\"').replace("\\", "\\\\")
         escaped_title = title.replace('"', '\\"').replace("\\", "\\\\")
         escaped_folder = folder.replace('"', '\\"').replace("\\", "\\\\")
@@ -121,19 +108,14 @@ class PodcastAgent(BaseModel):
         script = f'''
         tell application "Notes"
             activate
-
-            -- Create folder if it doesn't exist
             try
                 set targetFolder to folder "{escaped_folder}"
             on error
                 set targetFolder to make new folder with properties {{name:"{escaped_folder}"}}
             end try
-
-            -- Create new note
             tell targetFolder
                 make new note with properties {{name:"{escaped_title}", body:"{escaped_content}"}}
             end tell
-
         end tell
         '''
         return self.run_applescript(script)
@@ -154,14 +136,11 @@ class PodcastAgent(BaseModel):
             yesterday = today - timedelta(days=1)
 
             for entry in parsed_feed.entries[: self.config.max_episodes_per_day]:
-                # Parse publication date
                 pub_date = datetime.fromtimestamp(time.mktime(entry.published_parsed))
 
-                # Only process episodes from today or yesterday
                 if pub_date.date() not in [today, yesterday]:
                     continue
 
-                # Find audio URL
                 audio_url = None
                 for link in entry.get("links", []):
                     if link.get("type", "").startswith("audio/"):
@@ -250,13 +229,12 @@ class PodcastAgent(BaseModel):
             logger.error(f"Error transcribing {episode.title}: {str(e)}")
             return False
 
-    async def summarize_with_fabric(self, episode: PodcastEpisode) -> bool:
-        """Summarize transcript using fabric"""
+    async def summarize_episode(self, episode: PodcastEpisode) -> bool:
+        """Summarize transcript using pydantic-ai Claude agent"""
         if not episode.transcript_path:
             return False
 
-        task = self.config.fabric_pattern
-        summary_filename = f"{episode.transcript_path.stem}_{task}.md"
+        summary_filename = f"{episode.transcript_path.stem}_summary.md"
         summary_path = self.config.summary_dir / summary_filename
 
         if summary_path.exists():
@@ -267,89 +245,87 @@ class PodcastAgent(BaseModel):
         try:
             logger.info(f"Summarizing: {episode.title}")
 
-            # Run fabric command with pipe input
-            import subprocess
-
-            # Read transcript content
             with open(episode.transcript_path, "r", encoding="utf-8") as f:
                 transcript_content = f.read()
 
-            cmd = [
-                "fabric",
-                "--pattern",
-                self.config.fabric_pattern,
-                "--output",
-                str(summary_path),
-            ]
+            summary = await summarize_transcript(transcript_content)
+            markdown = summary.to_markdown(episode.title, episode.podcast_name)
 
-            result = subprocess.run(
-                cmd, input=transcript_content, capture_output=True, text=True
-            )
+            with open(summary_path, "w", encoding="utf-8") as f:
+                f.write(markdown)
 
-            if result.returncode == 0:
-                episode.summary_path = summary_path
-                logger.info(f"Summarized: {summary_filename}")
+            episode.summary_path = summary_path
+            logger.info(f"Summarized: {summary_filename}")
 
-                # Save to Apple Notes if enabled
-                if self.config.save_to_notes:
-                    try:
-                        with open(summary_path, "r", encoding="utf-8") as f:
-                            summary_content = f.read()
+            if self.config.save_to_notes:
+                try:
+                    notes_title = f"{episode.podcast_name}: {episode.title}"
+                    self.save_to_notes(notes_title, markdown, self.config.notes_folder)
+                    logger.info(f"Saved to Notes: {notes_title}")
+                except Exception as e:
+                    logger.error(f"Failed to save to Notes: {str(e)}")
 
-                        notes_title = f"{episode.podcast_name}: {episode.title}"
-                        self.save_to_notes(
-                            notes_title, summary_content, self.config.notes_folder
-                        )
-                        logger.info(f"Saved to Notes: {notes_title}")
-                    except Exception as e:
-                        logger.error(f"Failed to save to Notes: {str(e)}")
-
-                return True
-            else:
-                logger.error(f"Fabric error: {result.stderr}")
-                return False
+            return True
 
         except Exception as e:
             logger.error(f"Error summarizing {episode.title}: {str(e)}")
             return False
 
-    async def process_episode(self, episode: PodcastEpisode) -> ProcessingResult:
+    async def process_episode(
+        self, episode: PodcastEpisode, conn: sqlite3.Connection, episode_id: int
+    ) -> ProcessingResult:
         """Process a single episode: download, transcribe, summarize"""
         start_time = time.time()
 
         try:
             # Download
             if not await self.download_episode(episode):
+                db.update_episode_status(conn, episode_id, "failed", error_message="Failed to download")
                 return ProcessingResult(
                     episode=episode,
                     success=False,
                     error_message="Failed to download episode",
                     processing_time=time.time() - start_time,
                 )
+            db.update_episode_status(
+                conn, episode_id, "downloaded",
+                local_audio_path=str(episode.local_audio_path),
+            )
 
             # Transcribe
             if not self.transcribe_episode(episode):
+                db.update_episode_status(conn, episode_id, "failed", error_message="Failed to transcribe")
                 return ProcessingResult(
                     episode=episode,
                     success=False,
                     error_message="Failed to transcribe episode",
                     processing_time=time.time() - start_time,
                 )
+            db.update_episode_status(
+                conn, episode_id, "transcribed",
+                transcript_path=str(episode.transcript_path),
+            )
 
             # Summarize
-            if not await self.summarize_with_fabric(episode):
+            if not await self.summarize_episode(episode):
+                db.update_episode_status(conn, episode_id, "failed", error_message="Failed to summarize")
                 return ProcessingResult(
                     episode=episode,
                     success=False,
                     error_message="Failed to summarize episode",
                     processing_time=time.time() - start_time,
                 )
+            db.update_episode_status(
+                conn, episode_id, "summarized",
+                summary_path=str(episode.summary_path),
+            )
 
             return ProcessingResult(
                 episode=episode, success=True, processing_time=time.time() - start_time
             )
 
         except Exception as e:
+            db.update_episode_status(conn, episode_id, "failed", error_message=str(e))
             return ProcessingResult(
                 episode=episode,
                 success=False,
@@ -357,91 +333,58 @@ class PodcastAgent(BaseModel):
                 processing_time=time.time() - start_time,
             )
 
-    async def run_summarization_only(self):
-        """Run summarization on existing transcript files"""
-        logger.info("Starting summarization of existing transcripts")
+    async def run_processing(self):
+        """Main method to process all feeds"""
+        logger.info("Starting podcast processing")
 
-        transcript_files = list(self.config.transcript_dir.glob("*.txt"))
-        results = []
+        conn = db.init_db(self.config.db_path)
+        run_id = db.start_run(conn)
+        episodes_discovered = 0
 
-        for transcript_path in transcript_files:
-            start_time = time.time()
-
-            # Create a minimal episode object for processing
-            episode = PodcastEpisode(
-                title=transcript_path.stem,
-                audio_url="http://dummy",  # Required by model but not used
-                published_date=datetime.now(),
-                podcast_name="existing",
-                transcript_path=transcript_path,
-            )
-
-            try:
-                success = await self.summarize_with_fabric(episode)
-
-                result = ProcessingResult(
-                    episode=episode,
-                    success=success,
-                    error_message=None if success else "Failed to summarize",
-                    processing_time=time.time() - start_time,
-                )
-                results.append(result)
-
-            except Exception as e:
-                result = ProcessingResult(
-                    episode=episode,
-                    success=False,
-                    error_message=str(e),
-                    processing_time=time.time() - start_time,
-                )
-                results.append(result)
-
-        # Log summary
-        successful = sum(1 for r in results if r.success)
-        failed = len(results) - successful
-        total_time = sum(r.processing_time for r in results)
-
-        logger.info(
-            f"Summarization complete: {successful} successful, {failed} failed, {total_time:.2f}s total"
-        )
-
-        # Send notification if enabled
-        if self.config.notifications_enabled:
-            self.send_notification(
-                "Summarization Complete",
-                f"{successful} summaries created, {failed} failed",
-                f"Processed {len(transcript_files)} transcripts",
-            )
-
-        return results
-
-    async def run_daily_processing(self):
-        """Main method to process all feeds daily"""
-        logger.info("Starting daily podcast processing")
-
-        all_episodes = []
-
-        # Fetch episodes from all feeds
+        # Fetch episodes from all feeds and insert into DB
         for feed in self.config.rss_feeds:
             episodes = await self.fetch_rss_feed(feed)
-            all_episodes.extend(episodes)
+            for ep in episodes:
+                db.insert_episode(
+                    conn,
+                    podcast_name=ep.podcast_name,
+                    title=ep.title,
+                    audio_url=str(ep.audio_url),
+                    published_date=ep.published_date.isoformat(),
+                    duration=ep.duration,
+                    description=ep.description,
+                )
+                episodes_discovered += 1
 
-        # Process episodes
+        # Process pending episodes from DB
+        pending = db.get_pending_episodes(conn)
         results = []
-        for episode in all_episodes:
-            result = await self.process_episode(episode)
+
+        for row in pending:
+            episode = PodcastEpisode(
+                title=row["title"],
+                description=row["description"],
+                audio_url=row["audio_url"],
+                published_date=datetime.fromisoformat(row["published_date"]),
+                duration=row["duration"],
+                podcast_name=row["podcast_name"],
+                local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
+                transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
+            )
+            result = await self.process_episode(episode, conn, row["id"])
             results.append(result)
 
-        # Log summary
         successful = sum(1 for r in results if r.success)
         failed = len(results) - successful
         total_time = sum(r.processing_time for r in results)
 
+        db.finish_run(conn, run_id, episodes_discovered, successful, failed)
+        conn.close()
+
         logger.info(
-            f"Daily processing complete: {successful} successful, {failed} failed, {total_time:.2f}s total"
+            f"Processing complete: {successful} successful, {failed} failed, {total_time:.2f}s total"
         )
 
-        # Send notifications if enabled
         if self.config.notifications_enabled:
             self.send_notification(
                 "Podcast Processing Complete",
@@ -449,32 +392,18 @@ class PodcastAgent(BaseModel):
                 f"Total time: {total_time:.1f}s",
             )
 
-        # Speak results if enabled
         if self.config.speak_results:
             speech_text = f"Podcast processing complete. {successful} episodes processed successfully."
             if failed > 0:
                 speech_text += f" {failed} episodes failed."
             self.speak_text(speech_text)
 
-        # Show completion alert if enabled
         if self.config.show_completion_alert:
             self.show_alert(
                 f"Processing complete!\n\n"
-                f"✅ {successful} episodes processed\n"
-                f"❌ {failed} failed\n"
-                f"⏱️ Total time: {total_time:.1f}s"
+                f"{successful} episodes processed\n"
+                f"{failed} failed\n"
+                f"Total time: {total_time:.1f}s"
             )
 
         return results
-
-    def schedule_daily_run(self, time_str: str = "07:00"):
-        """Schedule the agent to run daily at specified time"""
-        schedule.every().day.at(time_str).do(
-            lambda: asyncio.run(self.run_daily_processing())
-        )
-
-        logger.info(f"Scheduled daily run at {time_str}")
-
-        while True:
-            schedule.run_pending()
-            time.sleep(60 * 60 * 13)  # Check every 13 h

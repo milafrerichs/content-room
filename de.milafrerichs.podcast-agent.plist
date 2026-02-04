@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>de.milafrerichs.podcast-agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/milafrerichs/.local/bin/uv</string>
+        <string>run</string>
+        <string>--project</string>
+        <string>/Users/milafrerichs/Development/ai/personal/news/podcast-agent</string>
+        <string>python</string>
+        <string>run.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/milafrerichs/Development/ai/personal/news/podcast-agent</string>
+
+    <key>StartInterval</key>
+    <integer>14400</integer>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/podcast-agent.stdout</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/podcast-agent.stderr</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
