@@ -1,0 +1,28 @@
+[project]
+name = "news-agent"
+dynamic = ["version"]
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiohttp>=3.12.15",
+    "feedparser>=6.0.12",
+    "openai-whisper>=20250625",
+    "pydantic>=2.11.9",
+    "python-dotenv>=1.1.1",
+    "pyyaml>=6.0.2",
+    "requests>=2.32.5",
+    "schedule>=1.2.2",
+		"click>=8.3.0",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "podcast_agent.__version__"}
+
+
+[project.scripts]
+news = "cli:cli"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
