@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}{{ episode['title'] | truncate(60) }}{% endblock %}
+
+{% block content %}
+<div class="p-8 fade-in max-w-4xl">
+
+  <!-- Back link -->
+  <a href="/episodes" class="inline-flex items-center gap-1.5 mono text-xs text-slate-500 hover:text-accent transition-colors mb-6">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    Back to Episodes
+  </a>
+
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="mono text-xs text-accent/70 tracking-widest mb-2">{{ episode['podcast_name'] }}</div>
+    <h1 class="text-xl font-semibold text-white leading-snug mb-4">{{ episode['title'] }}</h1>
+
+    <!-- Meta tags row -->
+    <div class="flex flex-wrap items-center gap-2">
+
+      {% if episode['status'] == 'summarized' %}
+        {% set badge_cls = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' %}
+      {% elif episode['status'] == 'transcribed' %}
+        {% set badge_cls = 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' %}
+      {% elif episode['status'] == 'downloaded' %}
+        {% set badge_cls = 'bg-blue-500/15 text-blue-400 border-blue-500/30' %}
+      {% elif episode['status'] == 'failed' %}
+        {% set badge_cls = 'bg-red-500/15 text-red-400 border-red-500/30' %}
+      {% else %}
+        {% set badge_cls = 'bg-slate-500/15 text-slate-400 border-slate-500/30' %}
+      {% endif %}
+
+      <span class="mono text-xs border rounded px-2 py-0.5 {{ badge_cls }}">{{ episode['status'] }}</span>
+
+      {% if episode['published_date'] %}
+      <span class="mono text-xs text-slate-500 bg-surface-800 border border-surface-700 rounded px-2 py-0.5">
+        {{ episode['published_date'][:10] }}
+      </span>
+      {% endif %}
+
+      {% if episode['duration'] %}
+      <span class="mono text-xs text-slate-500 bg-surface-800 border border-surface-700 rounded px-2 py-0.5">
+        {{ episode['duration'] }}
+      </span>
+      {% endif %}
+
+      {% if episode['read_at'] %}
+      <span class="inline-flex items-center gap-1.5 mono text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded px-2 py-0.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+        Read {{ episode['read_at'][:10] }}
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Error message (if failed) -->
+  {% if episode['error_message'] %}
+  <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
+    <div class="mono text-xs text-red-400 tracking-wider mb-1.5">ERROR</div>
+    <p class="text-sm text-red-300 font-mono">{{ episode['error_message'] }}</p>
+  </div>
+  {% endif %}
+
+  <!-- Summary -->
+  {% if summary_html %}
+  <div class="bg-surface-800 border border-surface-700 rounded-xl p-6 mb-5">
+    <div class="mono text-xs text-slate-500 tracking-wider mb-4">SUMMARY</div>
+    <div class="prose-dark text-sm text-slate-300 leading-relaxed space-y-3">
+      {{ summary_html | safe }}
+    </div>
+  </div>
+  {% elif episode['status'] == 'summarized' %}
+  <div class="bg-surface-800 border border-surface-700 rounded-xl p-6 mb-5 text-center">
+    <p class="text-slate-500 text-sm">Summary file not found on disk.</p>
+  </div>
+  {% endif %}
+
+  <!-- Transcript preview -->
+  {% if transcript_preview %}
+  <details class="bg-surface-800 border border-surface-700 rounded-xl mb-5 overflow-hidden group">
+    <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-surface-700/50 transition-colors">
+      <div class="mono text-xs text-slate-500 tracking-wider">TRANSCRIPT PREVIEW</div>
+      <svg class="w-4 h-4 text-slate-600 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </summary>
+    <div class="px-6 pb-5 border-t border-surface-700">
+      <pre class="mono text-xs text-slate-400 leading-relaxed whitespace-pre-wrap mt-4 overflow-x-auto">{{ transcript_preview }}</pre>
+      <p class="mono text-xs text-slate-600 mt-3">— first 1,000 characters</p>
+    </div>
+  </details>
+  {% endif %}
+
+  <!-- Mark as read button -->
+  {% if not episode['read_at'] %}
+  <div>
+    <button
+      hx-post="/episodes/{{ episode['id'] }}/read"
+      hx-swap="outerHTML"
+      class="inline-flex items-center gap-2 px-5 py-2.5 bg-accent/15 border border-accent/40 text-accent text-sm font-medium rounded-lg hover:bg-accent/25 transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+      </svg>
+      Mark as Read
+    </button>
+  </div>
+  {% endif %}
+
+</div>
+
+<style>
+  /* Prose styles for rendered markdown inside dark theme */
+  .prose-dark h1, .prose-dark h2, .prose-dark h3 { color: #e2e8f0; font-weight: 600; margin-top: 1.25em; margin-bottom: 0.5em; }
+  .prose-dark h1 { font-size: 1.2em; }
+  .prose-dark h2 { font-size: 1.05em; }
+  .prose-dark h3 { font-size: 0.95em; }
+  .prose-dark p  { color: #94a3b8; margin-bottom: 0.75em; }
+  .prose-dark ul, .prose-dark ol { padding-left: 1.25em; margin-bottom: 0.75em; }
+  .prose-dark li { color: #94a3b8; margin-bottom: 0.3em; }
+  .prose-dark ul { list-style-type: disc; }
+  .prose-dark ol { list-style-type: decimal; }
+  .prose-dark code { font-family: 'Space Mono', monospace; font-size: 0.8em; background: rgba(255,255,255,0.06); padding: 0.1em 0.4em; border-radius: 3px; color: #22d3ee; }
+  .prose-dark strong { color: #cbd5e1; font-weight: 600; }
+  .prose-dark hr { border-color: #1a253d; margin: 1em 0; }
+</style>
+{% endblock %}

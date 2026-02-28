@@ -35,6 +35,12 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             episodes_failed INTEGER DEFAULT 0
         );
     """)
+    # Add read_at column if it doesn't exist (backwards-compatible migration)
+    try:
+        conn.execute("ALTER TABLE episodes ADD COLUMN read_at TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     return conn
 
 
@@ -127,3 +133,109 @@ def finish_run(
         (episodes_discovered, episodes_processed, episodes_failed, run_id),
     )
     conn.commit()
+
+
+# --- Dashboard / Web queries ---
+
+
+def get_dashboard_stats(conn: sqlite3.Connection) -> dict:
+    """Return summary stats for the dashboard."""
+    status_rows = conn.execute(
+        "SELECT status, COUNT(*) as count FROM episodes GROUP BY status"
+    ).fetchall()
+    by_status = {row["status"]: row["count"] for row in status_rows}
+
+    today_count = conn.execute(
+        "SELECT COUNT(*) as count FROM episodes WHERE date(discovered_at) = date('now')"
+    ).fetchone()["count"]
+
+    last_run = conn.execute(
+        "SELECT * FROM runs WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1"
+    ).fetchone()
+
+    return {
+        "by_status": by_status,
+        "today_count": today_count,
+        "last_run": dict(last_run) if last_run else None,
+        "total": sum(by_status.values()),
+    }
+
+
+def get_all_episodes(
+    conn: sqlite3.Connection,
+    podcast_name: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    """Fetch episodes with optional filters."""
+    where, params = _episode_filters(podcast_name, status, date_from, date_to, search)
+    query = f"SELECT * FROM episodes{where} ORDER BY published_date DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    return conn.execute(query, params).fetchall()
+
+
+def get_episode_count(
+    conn: sqlite3.Connection,
+    podcast_name: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
+) -> int:
+    """Return total count matching the same filters as get_all_episodes."""
+    where, params = _episode_filters(podcast_name, status, date_from, date_to, search)
+    return conn.execute(f"SELECT COUNT(*) as c FROM episodes{where}", params).fetchone()["c"]
+
+
+def _episode_filters(
+    podcast_name: Optional[str],
+    status: Optional[str],
+    date_from: Optional[str],
+    date_to: Optional[str],
+    search: Optional[str],
+) -> tuple[str, list]:
+    clauses: list[str] = []
+    params: list = []
+    if podcast_name:
+        clauses.append("podcast_name = ?")
+        params.append(podcast_name)
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    if date_from:
+        clauses.append("date(published_date) >= date(?)")
+        params.append(date_from)
+    if date_to:
+        clauses.append("date(published_date) <= date(?)")
+        params.append(date_to)
+    if search:
+        clauses.append("(title LIKE ? OR description LIKE ?)")
+        params.extend([f"%{search}%", f"%{search}%"])
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where, params
+
+
+def get_episode_by_id(conn: sqlite3.Connection, episode_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM episodes WHERE id = ?", (episode_id,)).fetchone()
+
+
+def get_distinct_podcast_names(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT podcast_name FROM episodes ORDER BY podcast_name"
+    ).fetchall()
+    return [row["podcast_name"] for row in rows]
+
+
+def mark_episode_read(conn: sqlite3.Connection, episode_id: int) -> None:
+    conn.execute(
+        "UPDATE episodes SET read_at = datetime('now') WHERE id = ?", (episode_id,)
+    )
+    conn.commit()
+
+
+def get_all_runs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()

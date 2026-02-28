@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-8 fade-in">
+
+  <!-- Page header -->
+  <div class="mb-8">
+    <div class="mono text-xs text-accent tracking-widest mb-1">OVERVIEW</div>
+    <h1 class="text-2xl font-semibold text-white">Dashboard</h1>
+  </div>
+
+  <!-- Top stat row -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+    <!-- Total episodes -->
+    <div class="card bg-surface-800 border border-surface-700 rounded-xl p-5">
+      <div class="mono text-xs text-slate-500 tracking-wider mb-3">TOTAL EPISODES</div>
+      <div class="mono text-3xl font-bold text-white">{{ stats.total }}</div>
+      <div class="mt-2 text-xs text-slate-500">in database</div>
+    </div>
+
+    <!-- Today -->
+    <div class="card bg-surface-800 border border-surface-700 rounded-xl p-5">
+      <div class="mono text-xs text-slate-500 tracking-wider mb-3">DISCOVERED TODAY</div>
+      <div class="mono text-3xl font-bold text-accent">{{ stats.today_count }}</div>
+      <div class="mt-2 text-xs text-slate-500">new episodes</div>
+    </div>
+
+    <!-- Summarized -->
+    <div class="card bg-surface-800 border border-surface-700 rounded-xl p-5">
+      <div class="mono text-xs text-slate-500 tracking-wider mb-3">SUMMARIZED</div>
+      <div class="mono text-3xl font-bold text-emerald-400">{{ stats.by_status.get('summarized', 0) }}</div>
+      <div class="mt-2 text-xs text-slate-500">ready to read</div>
+    </div>
+
+    <!-- Failed -->
+    <div class="card bg-surface-800 border border-surface-700 rounded-xl p-5">
+      <div class="mono text-xs text-slate-500 tracking-wider mb-3">FAILED</div>
+      <div class="mono text-3xl font-bold {% if stats.by_status.get('failed', 0) > 0 %}text-red-400{% else %}text-slate-600{% endif %}">
+        {{ stats.by_status.get('failed', 0) }}
+      </div>
+      <div class="mt-2 text-xs text-slate-500">need attention</div>
+    </div>
+  </div>
+
+  <!-- Status breakdown + Last run -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Status breakdown -->
+    <div class="bg-surface-800 border border-surface-700 rounded-xl p-6">
+      <div class="mono text-xs text-slate-500 tracking-wider mb-5">STATUS BREAKDOWN</div>
+
+      {% set statuses = [
+        ('discovered', 'Discovered', 'bg-slate-500', 'text-slate-300'),
+        ('downloaded', 'Downloaded', 'bg-blue-500', 'text-blue-300'),
+        ('transcribed', 'Transcribed', 'bg-yellow-500', 'text-yellow-300'),
+        ('summarized', 'Summarized', 'bg-emerald-500', 'text-emerald-300'),
+        ('failed',     'Failed',     'bg-red-500',   'text-red-300'),
+      ] %}
+
+      <div class="space-y-3">
+        {% for key, label, bar_color, text_color in statuses %}
+        {% set count = stats.by_status.get(key, 0) %}
+        {% set pct = (count / stats.total * 100) | round(1) if stats.total > 0 else 0 %}
+        <div>
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="text-sm {{ text_color }}">{{ label }}</span>
+            <span class="mono text-xs text-slate-400">{{ count }} <span class="text-slate-600">({{ pct }}%)</span></span>
+          </div>
+          <div class="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+            <div class="{{ bar_color }} h-full rounded-full transition-all duration-700" style="width: {{ pct }}%"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Last run -->
+    <div class="bg-surface-800 border border-surface-700 rounded-xl p-6">
+      <div class="mono text-xs text-slate-500 tracking-wider mb-5">LAST RUN</div>
+
+      {% if stats.last_run %}
+      <div class="space-y-4">
+        <div class="flex items-start gap-3">
+          <div class="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0"></div>
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">Started</div>
+            <div class="mono text-sm text-slate-200">{{ stats.last_run.started_at }}</div>
+          </div>
+        </div>
+        {% if stats.last_run.finished_at %}
+        <div class="flex items-start gap-3">
+          <div class="w-2 h-2 rounded-full bg-accent mt-1.5 flex-shrink-0"></div>
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">Finished</div>
+            <div class="mono text-sm text-slate-200">{{ stats.last_run.finished_at }}</div>
+          </div>
+        </div>
+        {% endif %}
+        <div class="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-surface-700">
+          <div class="text-center">
+            <div class="mono text-xl font-bold text-white">{{ stats.last_run.episodes_discovered }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">found</div>
+          </div>
+          <div class="text-center border-x border-surface-700">
+            <div class="mono text-xl font-bold text-emerald-400">{{ stats.last_run.episodes_processed }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">processed</div>
+          </div>
+          <div class="text-center">
+            <div class="mono text-xl font-bold {% if stats.last_run.episodes_failed > 0 %}text-red-400{% else %}text-slate-600{% endif %}">
+              {{ stats.last_run.episodes_failed }}
+            </div>
+            <div class="text-xs text-slate-500 mt-0.5">failed</div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="flex flex-col items-center justify-center py-8 text-center">
+        <div class="w-10 h-10 rounded-full bg-surface-700 flex items-center justify-center mb-3">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <p class="text-sm text-slate-500">No completed runs yet</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Quick links -->
+  <div class="mt-6 flex gap-3">
+    <a href="/episodes?status=summarized"
+       class="inline-flex items-center gap-2 px-4 py-2 bg-accent/10 border border-accent/30 text-accent text-sm rounded-lg hover:bg-accent/20 transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      Browse Summaries
+    </a>
+    <a href="/runs"
+       class="inline-flex items-center gap-2 px-4 py-2 bg-surface-800 border border-surface-700 text-slate-400 text-sm rounded-lg hover:border-slate-500 hover:text-slate-300 transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      View Run History
+    </a>
+  </div>
+
+</div>
+{% endblock %}

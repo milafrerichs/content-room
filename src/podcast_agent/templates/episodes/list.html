@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Episodes{% endblock %}
+
+{% block content %}
+<div class="p-8 fade-in">
+
+  <!-- Page header -->
+  <div class="mb-6">
+    <div class="mono text-xs text-accent tracking-widest mb-1">LIBRARY</div>
+    <h1 class="text-2xl font-semibold text-white">Episodes</h1>
+  </div>
+
+  <!-- Filter form -->
+  <form
+    hx-get="/episodes/search"
+    hx-target="#episodes-list"
+    hx-trigger="change"
+    hx-indicator="#search-spinner"
+    class="bg-surface-800 border border-surface-700 rounded-xl p-5 mb-6"
+  >
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 items-end">
+
+      <!-- Podcast name -->
+      <div>
+        <label class="block mono text-xs text-slate-500 tracking-wider mb-1.5">PODCAST</label>
+        <select name="podcast_name" class="form-input w-full rounded-lg px-3 py-2 text-sm">
+          <option value="">All podcasts</option>
+          {% for name in podcast_names %}
+          <option value="{{ name }}" {% if filters.podcast_name == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Status -->
+      <div>
+        <label class="block mono text-xs text-slate-500 tracking-wider mb-1.5">STATUS</label>
+        <select name="status" class="form-input w-full rounded-lg px-3 py-2 text-sm">
+          <option value="">All statuses</option>
+          {% for s in ['discovered', 'downloaded', 'transcribed', 'summarized', 'failed'] %}
+          <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Date from -->
+      <div>
+        <label class="block mono text-xs text-slate-500 tracking-wider mb-1.5">FROM</label>
+        <input type="date" name="date_from" value="{{ filters.date_from or '' }}"
+               class="form-input w-full rounded-lg px-3 py-2 text-sm" />
+      </div>
+
+      <!-- Date to -->
+      <div>
+        <label class="block mono text-xs text-slate-500 tracking-wider mb-1.5">TO</label>
+        <input type="date" name="date_to" value="{{ filters.date_to or '' }}"
+               class="form-input w-full rounded-lg px-3 py-2 text-sm" />
+      </div>
+
+      <!-- Search -->
+      <div>
+        <label class="block mono text-xs text-slate-500 tracking-wider mb-1.5">SEARCH</label>
+        <div class="relative">
+          <input
+            type="text"
+            name="search"
+            value="{{ filters.search or '' }}"
+            placeholder="Title or description…"
+            class="form-input w-full rounded-lg pl-8 pr-3 py-2 text-sm"
+            hx-get="/episodes/search"
+            hx-target="#episodes-list"
+            hx-trigger="keyup delay:300ms, change"
+            hx-include="closest form"
+          />
+          <svg class="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <span id="search-spinner" class="htmx-indicator absolute right-2.5 top-2.5">
+            <svg class="w-3.5 h-3.5 text-accent animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- Episode list (htmx target) -->
+  <div id="episodes-list">
+    {% include "episodes/_list_partial.html" %}
+  </div>
+
+</div>
+{% endblock %}
