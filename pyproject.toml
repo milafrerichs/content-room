@@ -1,11 +1,12 @@
 [project]
-name = "news-agent"
+name = "content-agent"
 dynamic = ["version"]
-description = "Add your description here"
+description = "Content aggregation agent for podcasts and articles"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.12.15",
+    "fastmcp>=2.0.0",
     "feedparser>=6.0.12",
     "openai-whisper>=20250625",
     "pydantic>=2.11.9",
@@ -17,12 +18,15 @@ dependencies = [
 ]
 
 [tool.setuptools.dynamic]
-version = {attr = "podcast_agent.__version__"}
+version = {attr = "content_agent.__version__"}
 
 
 [project.scripts]
-news = "cli:cli"
+content-agent = "run:main"
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
