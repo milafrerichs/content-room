@@ -4,12 +4,12 @@ import markdown as md_lib
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
-from podcast_agent.models import AgentConfig
+from content_agent.models import AgentConfig
 
 
 def create_app(config: AgentConfig) -> FastAPI:
     # Import routes here to avoid circular imports at module level
-    from podcast_agent.web.routes import dashboard, episodes, runs
+    from content_agent.web.routes import dashboard, episodes, runs
 
     app = FastAPI(title="Podcast Agent Dashboard")
 

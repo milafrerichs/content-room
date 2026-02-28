@@ -1,4 +1,5 @@
-rss_feeds:
+# Podcast feeds
+podcast_feeds:
   - name: "Huberman Lab"
     url: "https://feeds.megaphone.fm/hubermanlab"
   - name: "Feel Better Live More"
@@ -12,12 +13,23 @@ rss_feeds:
   - name: "ten_percent"
     url: "https://feeds.libsyn.com/570160/rss"
 
+# Article feeds
+article_feeds:
+  - name: "Hacker News"
+    url: "https://hnrss.org/frontpage"
+
+# Podcast directories
 download_dir: "~/Documents/news/podcasts/audio"
 transcript_dir: "~/Documents/news/podcasts/transcripts"
-summary_dir: "~/Documents/news/podcasts/summaries"
-db_path: "~/Documents/news/podcasts/podcast_agent.db"
+podcast_summary_dir: "~/Documents/news/podcasts/summaries"
+
+# Article directories
+article_summary_dir: "~/Documents/news/articles/summaries"
+
+db_path: "~/Documents/news/content_agent.db"
 whisper_model: "base"
 max_episodes_per_day: 5
+max_articles_per_day: 20
 
 # macOS integration
 notifications_enabled: true
@@ -25,3 +37,10 @@ speak_results: false
 show_completion_alert: false
 save_to_notes: false
 notes_folder: "Podcast Summaries"
+
+# LLM configuration
+# provider: "anthropic" (default) or "ollama" for local models
+# model: For anthropic use "claude-haiku-4-5", for ollama use "llama3.2", "mistral", etc.
+llm_provider: "anthropic"
+llm_model: "claude-haiku-4-5"
+# ollama_base_url: "http://localhost:11434/v1"  # Uncomment to customize Ollama URL

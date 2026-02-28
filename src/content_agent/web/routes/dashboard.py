@@ -3,8 +3,8 @@ import sqlite3
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from podcast_agent.db import get_dashboard_stats
-from podcast_agent.web.deps import get_conn
+from content_agent.db import get_dashboard_stats
+from content_agent.web.deps import get_conn
 
 router = APIRouter()
 

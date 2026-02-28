@@ -8,8 +8,8 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-from src.podcast_agent.agent import PodcastAgent
-from src.podcast_agent.models import AgentConfig
+from src.content_agent.agent import ContentAgent
+from src.content_agent.models import AgentConfig
 
 load_dotenv()
 
@@ -17,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("podcast_agent.log"),
+        logging.FileHandler("content_agent.log"),
         logging.StreamHandler(),
     ],
 )
@@ -31,10 +31,10 @@ def load_config(config_path: str = "config.yaml") -> AgentConfig:
 
 
 async def main():
-    logger.info("Podcast agent run starting")
+    logger.info("Content agent run starting")
     try:
         config = load_config()
-        agent = PodcastAgent(config=config)
+        agent = ContentAgent(config=config)
         results = await agent.run_processing()
 
         successful = sum(1 for r in results if r.success)

@@ -3,14 +3,14 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
-from podcast_agent.db import (
+from content_agent.db import (
     get_all_episodes,
     get_distinct_podcast_names,
     get_episode_by_id,
     get_episode_count,
     mark_episode_read,
 )
-from podcast_agent.web.deps import get_conn
+from content_agent.web.deps import get_conn
 
 router = APIRouter(prefix="/episodes")
 

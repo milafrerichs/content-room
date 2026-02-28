@@ -2,7 +2,7 @@ import sqlite3
 
 from fastapi import Request
 
-from podcast_agent.models import AgentConfig
+from content_agent.models import AgentConfig
 
 
 def get_conn(request: Request) -> sqlite3.Connection:
