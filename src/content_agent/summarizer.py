@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.providers.ollama import OllamaProvider
 
 from .models import Insights, MicroSummary, PodcastSummary, Recommendations, SponsorInfo
@@ -164,7 +165,10 @@ def _get_model_spec(
         return f"anthropic:{model}"
     elif provider == "ollama":
         ollama_provider = OllamaProvider(base_url=ollama_base_url)
-        return OpenAIModel(model, provider=ollama_provider)
+        # Use 'prompted' mode: puts JSON schema in system prompt instead of tool
+        # calling, which is far more compatible with small/local Ollama models.
+        profile = ModelProfile(default_structured_output_mode="prompted")
+        return OpenAIModel(model, provider=ollama_provider, profile=profile)
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
