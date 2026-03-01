@@ -45,6 +45,23 @@ def serve(host, port, reload, config_path):
     uvicorn.run(app, host=host, port=port, reload=reload)
 
 
+@cli.command(name="download")
+@click.option("--podcast", required=True, help="Podcast name (as in config).")
+@click.option("--count", default=1, show_default=True, type=int, help="Number of episodes to download.")
+@click.option("--config", "config_path", default="config.yaml", show_default=True)
+def download(podcast, count, config_path):
+    """Download and process N recent episodes from a podcast."""
+    config = load_config(config_path)
+    agent = ContentAgent(config=config)
+    try:
+        results = asyncio.run(agent.download_podcast(podcast, count))
+    except ValueError as e:
+        raise click.UsageError(str(e))
+    successful = sum(1 for r in results if r.success)
+    failed = len(results) - successful
+    click.echo(f"Done: {successful} succeeded, {failed} failed")
+
+
 async def work(config_path: str = "config.yaml"):
     config = load_config(config_path)
     agent = ContentAgent(config=config)

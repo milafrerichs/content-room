@@ -375,6 +375,86 @@ class ContentAgent(BaseModel):
                 processing_time=time.time() - start_time,
             )
 
+    async def fetch_podcast_episodes(self, feed: PodcastFeed, count: int) -> List[PodcastEpisode]:
+        """Fetch the N most recent episodes from an RSS feed, ignoring date filter."""
+        logger.info(f"Fetching RSS feed (no date filter): {feed.name}")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(str(feed.url)) as response:
+                    content = await response.text()
+
+            parsed_feed = feedparser.parse(content)
+            episodes = []
+
+            for entry in parsed_feed.entries[:count]:
+                pub_date = datetime.fromtimestamp(time.mktime(entry.published_parsed))
+
+                audio_url = None
+                for link in entry.get("links", []):
+                    if link.get("type", "").startswith("audio/"):
+                        audio_url = link["href"]
+                        break
+
+                if audio_url:
+                    episode = PodcastEpisode(
+                        title=entry.title,
+                        description=entry.get("description", ""),
+                        audio_url=audio_url,
+                        published_date=pub_date,
+                        duration=entry.get("itunes_duration"),
+                        podcast_name=feed.name,
+                    )
+                    episodes.append(episode)
+
+            return episodes
+
+        except Exception as e:
+            logger.error(f"Error fetching RSS feed {feed.name}: {str(e)}")
+            return []
+
+    async def download_podcast(self, podcast_name: str, count: int) -> List[ProcessingResult]:
+        """Download and process N recent episodes from a named podcast, bypassing date filter."""
+        feed = next(
+            (f for f in self.config.podcast_feeds if f.name.lower() == podcast_name.lower()),
+            None,
+        )
+        if feed is None:
+            available = ", ".join(f.name for f in self.config.podcast_feeds)
+            raise ValueError(f"Podcast '{podcast_name}' not found. Available: {available}")
+
+        episodes = await self.fetch_podcast_episodes(feed, count)
+        if not episodes:
+            logger.info(f"No episodes found for {podcast_name}")
+            return []
+
+        conn = db.init_db(self.config.db_path)
+        results = []
+
+        for ep in episodes:
+            db.insert_episode(
+                conn,
+                podcast_name=ep.podcast_name,
+                title=ep.title,
+                audio_url=str(ep.audio_url),
+                published_date=ep.published_date.isoformat(),
+                duration=ep.duration,
+                description=ep.description,
+            )
+
+        pending = db.get_pending_episodes(conn)
+        episode_map = {row["audio_url"]: row for row in pending}
+
+        for ep in episodes:
+            row = episode_map.get(str(ep.audio_url))
+            if row is None:
+                continue
+            result = await self.process_episode(ep, conn, row["id"])
+            results.append(result)
+
+        conn.close()
+        return results
+
     async def fetch_article_feed(self, feed: ArticleFeed) -> List[Article]:
         """Fetch and parse RSS feed to get recent articles"""
         logger.info(f"Fetching article feed: {feed.name}")
