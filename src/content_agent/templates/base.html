@@ -19,21 +19,16 @@
           },
           colors: {
             surface: {
-              950: '#080d18',
-              900: '#0d1424',
-              800: '#131c30',
-              700: '#1a253d',
-              600: '#22304f',
+              50:  '#f8fafc',
+              100: '#f1f5f9',
+              200: '#e2e8f0',
+              300: '#cbd5e1',
             },
             accent: {
-              DEFAULT: '#22d3ee',
-              dim: '#0e7490',
-              glow: 'rgba(34,211,238,0.15)',
+              DEFAULT: '#0891b2',
+              light: '#e0f2fe',
+              text: '#0e7490',
             },
-          },
-          boxShadow: {
-            'glow-sm': '0 0 12px rgba(34,211,238,0.18)',
-            'glow': '0 0 24px rgba(34,211,238,0.22)',
           },
         },
       },
@@ -41,74 +36,64 @@
   </script>
   <style>
     * { box-sizing: border-box; }
-    body { background: #080d18; font-family: 'DM Sans', sans-serif; }
+    body { background: #f8fafc; font-family: 'DM Sans', sans-serif; }
     .mono { font-family: 'Space Mono', monospace; }
 
-    /* Sidebar active state */
-    .nav-link { transition: all 0.2s ease; border-left: 2px solid transparent; }
-    .nav-link:hover { background: rgba(34,211,238,0.08); border-left-color: rgba(34,211,238,0.4); color: #22d3ee; }
-    .nav-link.active { background: rgba(34,211,238,0.12); border-left-color: #22d3ee; color: #22d3ee; }
+    /* Sidebar nav */
+    .nav-link { transition: all 0.15s ease; border-left: 2px solid transparent; }
+    .nav-link:hover { background: #f1f5f9; border-left-color: #cbd5e1; color: #334155; }
+    .nav-link.active { background: #e0f2fe; border-left-color: #0891b2; color: #0e7490; }
 
-    /* Scanline effect on sidebar */
-    .sidebar::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.008) 2px, rgba(255,255,255,0.008) 4px);
-      pointer-events: none;
-    }
-
-    /* Card hover effect */
-    .card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-    .card:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(34,211,238,0.2), 0 8px 32px rgba(0,0,0,0.4); }
+    /* Card hover */
+    .card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .card:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px #e2e8f0; }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: #080d18; }
-    ::-webkit-scrollbar-thumb { background: #1a253d; border-radius: 2px; }
-    ::-webkit-scrollbar-thumb:hover { background: #22304f; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
     /* htmx loading indicator */
     .htmx-request .htmx-indicator { display: inline-block; }
     .htmx-indicator { display: none; }
-    .htmx-request { opacity: 0.7; transition: opacity 0.2s; }
+    .htmx-request { opacity: 0.6; transition: opacity 0.2s; }
 
     /* Input styles */
     .form-input {
-      background: #0d1424;
-      border: 1px solid #1a253d;
-      color: #cbd5e1;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
     .form-input:focus {
       outline: none;
-      border-color: rgba(34,211,238,0.5);
-      box-shadow: 0 0 0 3px rgba(34,211,238,0.08);
+      border-color: #0891b2;
+      box-shadow: 0 0 0 3px rgba(8,145,178,0.1);
     }
-    .form-input option { background: #0d1424; }
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    .fade-in { animation: fadeIn 0.3s ease forwards; }
+    .fade-in { animation: fadeIn 0.25s ease forwards; }
   </style>
 </head>
-<body class="h-full flex text-slate-300">
+<body class="h-full flex text-slate-700">
 
   <!-- Sidebar -->
-  <aside class="sidebar relative w-56 flex-shrink-0 bg-surface-900 border-r border-surface-700 flex flex-col overflow-hidden" style="height: 100vh; position: sticky; top: 0;">
+  <aside class="w-56 flex-shrink-0 bg-white border-r border-surface-200 flex flex-col overflow-hidden" style="height: 100vh; position: sticky; top: 0;">
     <!-- Logo area -->
-    <div class="px-5 py-6 border-b border-surface-700">
+    <div class="px-5 py-6 border-b border-surface-200">
       <div class="flex items-center gap-2.5">
-        <div class="w-7 h-7 rounded-md bg-accent/20 border border-accent/40 flex items-center justify-center flex-shrink-0">
+        <div class="w-7 h-7 rounded-md bg-accent-light border border-accent/30 flex items-center justify-center flex-shrink-0">
           <svg class="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
           </svg>
         </div>
         <div>
           <div class="mono text-xs text-accent font-bold leading-tight tracking-wide">PODCAST</div>
-          <div class="mono text-xs text-slate-500 leading-tight tracking-widest">CONTROL ROOM</div>
+          <div class="mono text-xs text-slate-400 leading-tight tracking-widest">CONTROL ROOM</div>
         </div>
       </div>
     </div>
@@ -116,21 +101,21 @@
     <!-- Navigation -->
     <nav class="flex-1 px-3 py-4 space-y-0.5">
       <a href="/"
-         class="nav-link {% if request.url.path == '/' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-400 font-medium">
+         class="nav-link {% if request.url.path == '/' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
         </svg>
         Dashboard
       </a>
       <a href="/episodes"
-         class="nav-link {% if request.url.path.startswith('/episodes') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-400 font-medium">
+         class="nav-link {% if request.url.path.startswith('/episodes') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
         </svg>
         Episodes
       </a>
       <a href="/runs"
-         class="nav-link {% if request.url.path == '/runs' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-400 font-medium">
+         class="nav-link {% if request.url.path == '/runs' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
@@ -139,8 +124,8 @@
     </nav>
 
     <!-- Footer -->
-    <div class="px-5 py-4 border-t border-surface-700">
-      <div class="mono text-xs text-slate-600 tracking-wider">v1.0 · local</div>
+    <div class="px-5 py-4 border-t border-surface-200">
+      <div class="mono text-xs text-slate-400 tracking-wider">v1.0 · local</div>
     </div>
   </aside>
 

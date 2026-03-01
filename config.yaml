@@ -15,18 +15,18 @@ podcast_feeds:
 
 # Article feeds
 article_feeds:
-  - name: "Hacker News"
-    url: "https://hnrss.org/frontpage"
+  - name: "Simon Willison"
+    url: "https://simonwillison.net/atom/everything/"
 
 # Podcast directories
-download_dir: "~/Documents/news/podcasts/audio"
-transcript_dir: "~/Documents/news/podcasts/transcripts"
-podcast_summary_dir: "~/Documents/news/podcasts/summaries"
+download_dir: "~/news/podcasts/audio"
+transcript_dir: "~/news/podcasts/transcripts"
+podcast_summary_dir: "~/news/podcasts/summaries"
 
 # Article directories
-article_summary_dir: "~/Documents/news/articles/summaries"
+article_summary_dir: "~/news/articles/summaries"
 
-db_path: "~/Documents/news/content_agent.db"
+db_path: "~/news/content_agent.db"
 whisper_model: "base"
 max_episodes_per_day: 5
 max_articles_per_day: 20

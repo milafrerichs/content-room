@@ -29,6 +29,7 @@ version = {attr = "content_agent.__version__"}
 [project.scripts]
 content-agent = "run:main"
 news = "cli:cli"
+news-cli = "cli:cli"
 
 [build-system]
 requires = ["setuptools"]
