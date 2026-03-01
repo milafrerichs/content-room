@@ -2,6 +2,8 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
+from .models import ArticleFeed, PodcastFeed
+
 
 def init_db(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
@@ -43,6 +45,20 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             processed_at TEXT,
             read_at TEXT,
             UNIQUE(feed_name, url)
+        );
+
+        CREATE TABLE IF NOT EXISTS podcast_feeds (
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            url  TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS article_feeds (
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            url  TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS runs (
@@ -474,3 +490,42 @@ def get_distinct_podcast_names(conn: sqlite3.Connection) -> list[str]:
 def get_all_runs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Get all runs ordered by most recent first."""
     return conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()
+
+
+# =============================================================================
+# Feed Management Functions
+# =============================================================================
+
+
+def get_podcast_feeds(conn: sqlite3.Connection) -> list[PodcastFeed]:
+    """Return all podcast feeds as PodcastFeed model instances."""
+    rows = conn.execute("SELECT name, url FROM podcast_feeds ORDER BY name").fetchall()
+    return [PodcastFeed(name=row["name"], url=row["url"]) for row in rows]
+
+
+def upsert_podcast_feed(conn: sqlite3.Connection, name: str, url: str) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO podcast_feeds (name, url) VALUES (?, ?)",
+        (name, url),
+    )
+
+
+def delete_podcast_feed(conn: sqlite3.Connection, name: str) -> None:
+    conn.execute("DELETE FROM podcast_feeds WHERE name = ?", (name,))
+
+
+def get_article_feeds(conn: sqlite3.Connection) -> list[ArticleFeed]:
+    """Return all article feeds as ArticleFeed model instances."""
+    rows = conn.execute("SELECT name, url FROM article_feeds ORDER BY name").fetchall()
+    return [ArticleFeed(name=row["name"], url=row["url"]) for row in rows]
+
+
+def upsert_article_feed(conn: sqlite3.Connection, name: str, url: str) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO article_feeds (name, url) VALUES (?, ?)",
+        (name, url),
+    )
+
+
+def delete_article_feed(conn: sqlite3.Connection, name: str) -> None:
+    conn.execute("DELETE FROM article_feeds WHERE name = ?", (name,))

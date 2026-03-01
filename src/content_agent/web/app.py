@@ -4,12 +4,13 @@ import markdown as md_lib
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
+from content_agent import db
 from content_agent.models import AgentConfig
 
 
 def create_app(config: AgentConfig) -> FastAPI:
     # Import routes here to avoid circular imports at module level
-    from content_agent.web.routes import dashboard, episodes, podcasts, runs
+    from content_agent.web.routes import articles, dashboard, episodes, podcasts, runs
 
     app = FastAPI(title="Podcast Agent Dashboard")
 
@@ -29,6 +30,19 @@ def create_app(config: AgentConfig) -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(episodes.router)
     app.include_router(podcasts.router)
+    app.include_router(articles.router)
     app.include_router(runs.router)
+
+    @app.on_event("startup")
+    async def seed_feeds():
+        conn = db.init_db(config.db_path)
+        try:
+            for f in (config.podcast_feeds or []):
+                db.upsert_podcast_feed(conn, f.name, str(f.url))
+            for f in (config.article_feeds or []):
+                db.upsert_article_feed(conn, f.name, str(f.url))
+            conn.commit()
+        finally:
+            conn.close()
 
     return app

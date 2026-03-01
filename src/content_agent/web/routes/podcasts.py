@@ -1,20 +1,59 @@
+import sqlite3
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from content_agent import ContentAgent
+from content_agent import ContentAgent, db
 
 router = APIRouter(prefix="/podcasts")
 
 
+def get_conn(request: Request) -> sqlite3.Connection:
+    config = request.app.state.config
+    conn = sqlite3.connect(str(config.db_path))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 @router.get("", response_class=HTMLResponse)
 def podcasts_page(request: Request):
-    config = request.app.state.config
     templates = request.app.state.templates
-    feeds = config.podcast_feeds or []
+    conn = get_conn(request)
+    try:
+        feeds = db.get_podcast_feeds(conn)
+    finally:
+        conn.close()
     return templates.TemplateResponse("podcasts/list.html", {
         "request": request,
         "feeds": feeds,
     })
+
+
+@router.post("/create", response_class=HTMLResponse)
+async def create_podcast(request: Request, name: str = Form(...), url: str = Form(...)):
+    templates = request.app.state.templates
+    conn = get_conn(request)
+    try:
+        db.upsert_podcast_feed(conn, name, url)
+        conn.commit()
+        feeds = db.get_podcast_feeds(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse("podcasts/_feeds_list.html", {
+        "request": request,
+        "feeds": feeds,
+    })
+
+
+@router.delete("/{podcast_name}", response_class=HTMLResponse)
+def delete_podcast(request: Request, podcast_name: str):
+    conn = get_conn(request)
+    try:
+        db.delete_podcast_feed(conn, podcast_name)
+        conn.commit()
+    finally:
+        conn.close()
+    return HTMLResponse("")
 
 
 @router.post("/{podcast_name}/download", response_class=HTMLResponse)

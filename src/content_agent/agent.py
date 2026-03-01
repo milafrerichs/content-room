@@ -415,20 +415,21 @@ class ContentAgent(BaseModel):
 
     async def download_podcast(self, podcast_name: str, count: int) -> List[ProcessingResult]:
         """Download and process N recent episodes from a named podcast, bypassing date filter."""
+        conn = db.init_db(self.config.db_path)
+        podcast_feeds = db.get_podcast_feeds(conn)
         feed = next(
-            (f for f in self.config.podcast_feeds if f.name.lower() == podcast_name.lower()),
+            (f for f in podcast_feeds if f.name.lower() == podcast_name.lower()),
             None,
         )
         if feed is None:
-            available = ", ".join(f.name for f in self.config.podcast_feeds)
+            available = ", ".join(f.name for f in podcast_feeds)
             raise ValueError(f"Podcast '{podcast_name}' not found. Available: {available}")
 
         episodes = await self.fetch_podcast_episodes(feed, count)
         if not episodes:
             logger.info(f"No episodes found for {podcast_name}")
+            conn.close()
             return []
-
-        conn = db.init_db(self.config.db_path)
         results = []
 
         for ep in episodes:
@@ -568,7 +569,7 @@ class ContentAgent(BaseModel):
         articles_discovered = 0
 
         # Fetch episodes from all podcast feeds and insert into DB
-        for feed in self.config.podcast_feeds:
+        for feed in db.get_podcast_feeds(conn):
             episodes = await self.fetch_rss_feed(feed)
             for ep in episodes:
                 db.insert_episode(
@@ -583,7 +584,7 @@ class ContentAgent(BaseModel):
                 episodes_discovered += 1
 
         # Fetch articles from all article feeds and insert into DB
-        for feed in self.config.article_feeds:
+        for feed in db.get_article_feeds(conn):
             articles = await self.fetch_article_feed(feed)
             for art in articles:
                 db.insert_article(
