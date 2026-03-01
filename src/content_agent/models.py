@@ -214,9 +214,17 @@ class AgentConfig(BaseModel):
     notes_folder: str = "Podcast Summaries"
 
     # LLM configuration
-    llm_provider: Literal["anthropic", "ollama"] = "anthropic"
-    llm_model: str = "claude-haiku-4-5"  # For anthropic: claude-haiku-4-5, for ollama: llama3.2, etc.
+    llm_provider: Literal["anthropic", "ollama"] = "ollama"
+    llm_model: str = "llama3.2"          # Used when provider=ollama
+    anthropic_model: str = "claude-haiku-4-5"  # Used when provider=anthropic
     ollama_base_url: str = "http://localhost:11434/v1"
+
+    @property
+    def active_model(self) -> str:
+        """Return the model name for the active provider."""
+        if self.llm_provider == "anthropic":
+            return self.anthropic_model
+        return self.llm_model
 
     @model_validator(mode="after")
     def normalize_config(self) -> "AgentConfig":
