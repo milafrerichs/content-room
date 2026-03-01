@@ -173,8 +173,8 @@ def _get_agent(
     pattern: str,
     output_type: type,
     instructions: str,
-    provider: Literal["anthropic", "ollama"] = "anthropic",
-    model: str = "claude-haiku-4-5",
+    provider: Literal["anthropic", "ollama"] = "ollama",
+    model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> Agent:
     """Get or create a cached agent for the given pattern and provider/model."""
@@ -195,8 +195,8 @@ def _get_agent(
 
 async def extract_sponsors(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "anthropic",
-    model: str = "claude-haiku-4-5",
+    provider: Literal["anthropic", "ollama"] = "ollama",
+    model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> SponsorInfo:
     """Extract sponsor information from a transcript.
@@ -226,8 +226,8 @@ async def extract_sponsors(
 
 async def summarize_micro(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "anthropic",
-    model: str = "claude-haiku-4-5",
+    provider: Literal["anthropic", "ollama"] = "ollama",
+    model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> MicroSummary:
     """Create a quick micro summary of a transcript.
@@ -255,8 +255,8 @@ async def summarize_micro(
 
 async def extract_insights(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "anthropic",
-    model: str = "claude-haiku-4-5",
+    provider: Literal["anthropic", "ollama"] = "ollama",
+    model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> Insights:
     """Extract 10 key insights from a transcript (8 words each, Paul Graham style).
@@ -284,8 +284,8 @@ async def extract_insights(
 
 async def extract_recommendations(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "anthropic",
-    model: str = "claude-haiku-4-5",
+    provider: Literal["anthropic", "ollama"] = "ollama",
+    model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> Recommendations:
     """Extract actionable recommendations from a transcript.
@@ -313,8 +313,8 @@ async def extract_recommendations(
 
 async def summarize_transcript(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "anthropic",
-    model: str = "claude-haiku-4-5",
+    provider: Literal["anthropic", "ollama"] = "ollama",
+    model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> PodcastSummary:
     """Full extract_wisdom summarization of a transcript.
@@ -343,8 +343,8 @@ async def summarize_transcript(
 async def summarize_with_instructions(
     transcript: str,
     instructions: str,
-    provider: Literal["anthropic", "ollama"] = "anthropic",
-    model: str = "claude-haiku-4-5",
+    provider: Literal["anthropic", "ollama"] = "ollama",
+    model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> str:
     """Summarize a transcript with custom instructions.

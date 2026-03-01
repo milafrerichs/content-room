@@ -224,7 +224,7 @@ async def resummarize(episode_id: int, instructions: str) -> str:
         transcript,
         instructions,
         provider=config.llm_provider,
-        model=config.llm_model,
+        model=config.active_model,
         ollama_base_url=config.ollama_base_url,
     )
 
@@ -511,7 +511,7 @@ async def resummarize_article(article_id: int, instructions: str) -> str:
         content,
         instructions,
         provider=config.llm_provider,
-        model=config.llm_model,
+        model=config.active_model,
         ollama_base_url=config.ollama_base_url,
     )
 
@@ -546,7 +546,7 @@ async def get_sponsors(episode_id: int) -> str:
     result = await extract_sponsors(
         transcript,
         provider=config.llm_provider,
-        model=config.llm_model,
+        model=config.active_model,
         ollama_base_url=config.ollama_base_url,
     )
     return result.to_markdown()
@@ -577,7 +577,7 @@ async def get_micro_summary(episode_id: int) -> str:
     result = await summarize_micro(
         transcript,
         provider=config.llm_provider,
-        model=config.llm_model,
+        model=config.active_model,
         ollama_base_url=config.ollama_base_url,
     )
     return result.to_markdown(row["title"], row["podcast_name"])
@@ -606,7 +606,7 @@ async def get_insights(episode_id: int) -> str:
     result = await extract_insights(
         transcript,
         provider=config.llm_provider,
-        model=config.llm_model,
+        model=config.active_model,
         ollama_base_url=config.ollama_base_url,
     )
     return result.to_markdown(row["title"], row["podcast_name"])
@@ -637,7 +637,7 @@ async def get_recommendations(episode_id: int) -> str:
     result = await extract_recommendations(
         transcript,
         provider=config.llm_provider,
-        model=config.llm_model,
+        model=config.active_model,
         ollama_base_url=config.ollama_base_url,
     )
     return result.to_markdown(row["title"], row["podcast_name"])

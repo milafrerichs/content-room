@@ -39,8 +39,10 @@ save_to_notes: false
 notes_folder: "Podcast Summaries"
 
 # LLM configuration
-# provider: "anthropic" (default) or "ollama" for local models
-# model: For anthropic use "claude-haiku-4-5", for ollama use "llama3.2", "mistral", etc.
-llm_provider: "anthropic"
-llm_model: "claude-haiku-4-5"
+# llm_provider: "ollama" (default, local) or "anthropic" (cloud)
+# llm_model: Ollama model name, used when provider=ollama
+# anthropic_model: Anthropic model name, used when provider=anthropic
+llm_provider: "ollama"
+llm_model: "llama3.2"
+anthropic_model: "claude-haiku-4-5"
 # ollama_base_url: "http://localhost:11434/v1"  # Uncomment to customize Ollama URL

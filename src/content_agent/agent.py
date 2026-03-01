@@ -277,7 +277,7 @@ class ContentAgent(BaseModel):
             sponsors = await extract_sponsors(
                 transcript_content,
                 provider=self.config.llm_provider,
-                model=self.config.llm_model,
+                model=self.config.active_model,
                 ollama_base_url=self.config.ollama_base_url,
             )
 
@@ -285,7 +285,7 @@ class ContentAgent(BaseModel):
             summary = await summarize_transcript(
                 transcript_content,
                 provider=self.config.llm_provider,
-                model=self.config.llm_model,
+                model=self.config.active_model,
                 ollama_base_url=self.config.ollama_base_url,
             )
 
@@ -449,7 +449,7 @@ class ContentAgent(BaseModel):
             summary = await summarize_micro(
                 article.content,
                 provider=self.config.llm_provider,
-                model=self.config.llm_model,
+                model=self.config.active_model,
                 ollama_base_url=self.config.ollama_base_url,
             )
 
