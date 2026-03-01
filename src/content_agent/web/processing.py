@@ -1,0 +1,72 @@
+import asyncio
+import logging
+import sqlite3
+from pathlib import Path
+
+from content_agent.agent import ContentAgent
+from content_agent.models import AgentConfig, PodcastEpisode
+from content_agent import db
+
+logger = logging.getLogger(__name__)
+
+
+async def rerun_episode(episode_id: int, config: AgentConfig) -> None:
+    """Run only the needed pipeline step(s) for an episode that needs retrying."""
+    conn = sqlite3.connect(str(config.db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("SELECT * FROM episodes WHERE id = ?", (episode_id,)).fetchone()
+        if row is None:
+            logger.error(f"Episode {episode_id} not found for rerun")
+            return
+
+        start_status = row["status"]
+
+        episode = PodcastEpisode(
+            title=row["title"],
+            description=row["description"],
+            audio_url=row["audio_url"],
+            published_date=row["published_date"],
+            duration=row["duration"],
+            podcast_name=row["podcast_name"],
+            local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
+            transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
+            summary_path=Path(row["summary_path"]) if row["summary_path"] else None,
+        )
+
+        agent = ContentAgent(config=config)
+
+        if start_status == "transcribed":
+            if not await agent.summarize_episode(episode):
+                db.update_episode_status(conn, episode_id, "failed", error_message="Failed to summarize")
+                return
+            db.update_episode_status(conn, episode_id, "summarized", summary_path=str(episode.summary_path))
+
+        elif start_status == "downloaded":
+            if not agent.transcribe_episode(episode):
+                db.update_episode_status(conn, episode_id, "failed", error_message="Failed to transcribe")
+                return
+            db.update_episode_status(conn, episode_id, "transcribed", transcript_path=str(episode.transcript_path))
+
+            if not await agent.summarize_episode(episode):
+                db.update_episode_status(conn, episode_id, "failed", error_message="Failed to summarize")
+                return
+            db.update_episode_status(conn, episode_id, "summarized", summary_path=str(episode.summary_path))
+
+        else:
+            # "discovered" — run the full pipeline
+            await agent.process_episode(episode, conn, episode_id)
+
+    except Exception as e:
+        logger.error(f"Rerun failed for episode {episode_id}: {e}")
+        try:
+            db.update_episode_status(conn, episode_id, "failed", error_message=str(e))
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+def run_rerun_episode(episode_id: int, config: AgentConfig) -> None:
+    """Sync wrapper for FastAPI BackgroundTasks (runs in a threadpool thread)."""
+    asyncio.run(rerun_episode(episode_id, config))

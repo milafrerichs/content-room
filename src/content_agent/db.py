@@ -141,6 +141,14 @@ def update_episode_status(
     conn.commit()
 
 
+def reset_episode_for_rerun(conn: sqlite3.Connection, episode_id: int, reset_to_status: str) -> None:
+    conn.execute(
+        "UPDATE episodes SET status=?, error_message=NULL, processed_at=NULL WHERE id=?",
+        (reset_to_status, episode_id),
+    )
+    conn.commit()
+
+
 def get_pending_episodes(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Get episodes that haven't been fully processed yet."""
     return conn.execute(
