@@ -114,6 +114,13 @@
         </svg>
         Episodes
       </a>
+      <a href="/podcasts"
+         class="nav-link {% if request.url.path.startswith('/podcasts') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.536 8.464a5 5 0 010 7.072M12 10a2 2 0 110 4 2 2 0 010-4zm6.364-4.364a9 9 0 010 12.728M8.464 8.464a5 5 0 000 7.072M5.636 5.636a9 9 0 000 12.728"/>
+        </svg>
+        Podcasts
+      </a>
       <a href="/runs"
          class="nav-link {% if request.url.path == '/runs' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
