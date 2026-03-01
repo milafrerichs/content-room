@@ -1,6 +1,7 @@
+import sqlite3
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, Response
 
 from content_agent.db import (
@@ -9,8 +10,10 @@ from content_agent.db import (
     get_episode_by_id,
     get_episode_count,
     mark_episode_read,
+    reset_episode_for_rerun,
 )
 from content_agent.web.deps import get_conn
+from content_agent.web.processing import run_rerun_episode
 
 router = APIRouter(prefix="/episodes")
 
@@ -148,4 +151,60 @@ def mark_read(request: Request, episode_id: int):
     return Response(
         status_code=200,
         headers={"HX-Redirect": f"/episodes/{episode_id}"},
+    )
+
+
+def determine_reset_status(episode: sqlite3.Row) -> str:
+    """Map the current episode state to the status it should be reset to for rerun."""
+    status = episode["status"]
+    if status == "failed":
+        if episode["transcript_path"]:
+            return "transcribed"
+        elif episode["local_audio_path"]:
+            return "downloaded"
+        else:
+            return "discovered"
+    elif status in ("downloaded", "transcribed"):
+        return status
+    raise ValueError(f"Not rerunnable: status={status!r}")
+
+
+@router.post("/{episode_id}/rerun", response_class=HTMLResponse)
+def episode_rerun(request: Request, episode_id: int, background_tasks: BackgroundTasks):
+    conn = get_conn(request)
+    try:
+        episode = get_episode_by_id(conn, episode_id)
+        if episode is None:
+            return HTMLResponse("Episode not found", status_code=404)
+        reset_to = determine_reset_status(episode)
+        reset_episode_for_rerun(conn, episode_id, reset_to)
+        episode_dict = dict(episode)
+        episode_dict["status"] = reset_to
+    finally:
+        conn.close()
+
+    background_tasks.add_task(run_rerun_episode, episode_id, request.app.state.config)
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "episodes/_rerun_processing.html",
+        {"request": request, "episode": episode_dict},
+    )
+
+
+@router.get("/{episode_id}/actions", response_class=HTMLResponse)
+def episode_actions(request: Request, episode_id: int):
+    conn = get_conn(request)
+    try:
+        episode = get_episode_by_id(conn, episode_id)
+        if episode is None:
+            return HTMLResponse("Episode not found", status_code=404)
+        episode_dict = dict(episode)
+    finally:
+        conn.close()
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "episodes/_episode_actions.html",
+        {"request": request, "episode": episode_dict},
     )

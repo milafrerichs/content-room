@@ -1,0 +1,73 @@
+<div id="episode-actions">
+  {% if episode['status'] == 'failed' and episode['transcript_path'] %}
+  <button
+    hx-post="/episodes/{{ episode['id'] }}/rerun"
+    hx-target="#episode-actions"
+    hx-swap="outerHTML"
+    class="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    Retry Summarization
+  </button>
+
+  {% elif episode['status'] == 'failed' and episode['local_audio_path'] and not episode['transcript_path'] %}
+  <button
+    hx-post="/episodes/{{ episode['id'] }}/rerun"
+    hx-target="#episode-actions"
+    hx-swap="outerHTML"
+    class="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    Retry Transcription
+  </button>
+
+  {% elif episode['status'] == 'failed' %}
+  <button
+    hx-post="/episodes/{{ episode['id'] }}/rerun"
+    hx-target="#episode-actions"
+    hx-swap="outerHTML"
+    class="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    Retry Download
+  </button>
+
+  {% elif episode['status'] == 'downloaded' %}
+  <button
+    hx-post="/episodes/{{ episode['id'] }}/rerun"
+    hx-target="#episode-actions"
+    hx-swap="outerHTML"
+    class="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    Resume Transcription
+  </button>
+
+  {% elif episode['status'] == 'transcribed' %}
+  <button
+    hx-post="/episodes/{{ episode['id'] }}/rerun"
+    hx-target="#episode-actions"
+    hx-swap="outerHTML"
+    class="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    Resume Summarization
+  </button>
+
+  {% elif episode['status'] == 'summarized' and not episode['read_at'] %}
+  <button
+    hx-post="/episodes/{{ episode['id'] }}/read"
+    hx-swap="outerHTML"
+    class="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-light border border-accent/25 text-accent text-sm font-medium rounded-lg hover:bg-sky-100 transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    </svg>
+    Mark as Read
+  </button>
+  {% endif %}
+</div>
