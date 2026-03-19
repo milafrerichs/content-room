@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-03-19
+
+### Added
+
+- **Article browsing UI**: Full browse page with filters (feed, status, date, search), card grid with pagination, and detail view with on-demand summarization
+- **On-demand summarization**: Removed automatic summarization from the pipeline; articles and podcasts are now summarized only when requested via the UI
+- **One-sentence summaries**: Lightweight summaries generated automatically on discovery, providing quick previews without full summarization
+- **Unified feed timeline**: Combined articles and episodes in a single chronological view grouped by day (today expanded, older collapsed), with source/search filters
+- **Category view**: Tab-based feed timeline with "By Day" and "By Category" views; category filter pills for quick navigation
+- **Unified feed management**: Single page to manage both podcast and article feeds, showing item counts and last-item dates per feed
+- **Feed categories**: Categorize feeds by topic (e.g. "Tech", "Health"); feeds grouped by category; inline category editing via HTMX
+- **Archive**: Archive feed items to hide from regular views; dedicated archive page in sidebar; archive/unarchive from feed timeline and detail pages
+- **Config sync**: Feeds from config.yaml synced to database automatically during processing and via UI button
+- **Run Processing button**: Trigger the full pipeline (fetch, download, transcribe) from the web dashboard
+- **Settings page**: Per-task model override configuration via settings UI
+- **Settings table**: Database-backed settings for LLM provider/model per task
+
+### Changed
+
+- Processing pipeline stops at "transcribed" for podcasts (no auto-summarization)
+- Article processing removed from automatic runs (fetch only, summarize on demand)
+- Feed upserts use `ON CONFLICT` instead of `INSERT OR REPLACE` to preserve user-set categories
+- Unified feed query joins with feed tables to include category data
+- Episode and article list views exclude archived items by default
+
 ## [0.6.0] - 2026-02-07
 
 ### Added

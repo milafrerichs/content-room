@@ -1,17 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Podcasts{% endblock %}
+{% block title %}Article Feeds{% endblock %}
 
 {% block content %}
 <div class="p-8 fade-in">
+
+  <!-- Back link -->
+  <a href="/articles" class="inline-flex items-center gap-1.5 mono text-xs text-slate-400 hover:text-accent transition-colors mb-6">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    Back to Articles
+  </a>
 
   <!-- Page header -->
   <div class="flex items-center justify-between mb-6">
     <div>
       <div class="mono text-xs text-accent tracking-widest mb-1">FEEDS</div>
-      <h1 class="text-2xl font-semibold text-slate-800">Podcasts</h1>
+      <h1 class="text-2xl font-semibold text-slate-800">Article Feeds</h1>
     </div>
     <button
-      hx-post="/podcasts/sync"
+      hx-post="/articles/feeds/sync"
       hx-target="#feeds-container"
       hx-swap="innerHTML"
       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-surface-200 text-slate-500 text-sm rounded-lg hover:border-surface-300 hover:text-slate-700 transition-colors mono text-xs"
@@ -25,9 +33,9 @@
 
   <!-- Add feed form -->
   <div class="bg-white border border-surface-200 rounded-xl p-5 mb-6">
-    <div class="mono text-xs text-slate-400 tracking-wider mb-3">ADD PODCAST FEED</div>
+    <div class="mono text-xs text-slate-400 tracking-wider mb-3">ADD ARTICLE FEED</div>
     <form
-      hx-post="/podcasts/create"
+      hx-post="/articles/feeds/create"
       hx-target="#feeds-container"
       hx-swap="innerHTML"
       class="flex items-end gap-3"
@@ -37,7 +45,7 @@
         <input
           type="text"
           name="name"
-          placeholder="My Podcast"
+          placeholder="Tech News"
           required
           class="form-input w-full rounded-lg px-3 py-2 text-sm"
         />
@@ -47,7 +55,7 @@
         <input
           type="url"
           name="url"
-          placeholder="https://feeds.example.com/podcast.rss"
+          placeholder="https://feeds.example.com/articles.rss"
           required
           class="form-input w-full rounded-lg px-3 py-2 text-sm"
         />
@@ -64,9 +72,9 @@
     </form>
   </div>
 
-  <!-- Feeds list (replaced by HTMX on add) -->
+  <!-- Feeds list -->
   <div id="feeds-container">
-    {% include "podcasts/_feeds_list.html" %}
+    {% include "articles/_feeds_list.html" %}
   </div>
 
 </div>

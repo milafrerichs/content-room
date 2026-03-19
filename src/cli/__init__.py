@@ -5,7 +5,10 @@ CLI Tool with Click
 import asyncio
 import click
 import yaml
+from dotenv import load_dotenv
 from content_agent import __version__, ContentAgent, AgentConfig
+
+load_dotenv()
 
 
 @click.group()

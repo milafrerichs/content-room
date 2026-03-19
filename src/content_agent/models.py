@@ -1,7 +1,40 @@
 from datetime import datetime
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, HttpUrl, Field, model_validator
+
+
+# =============================================================================
+# Task Model Configuration
+# =============================================================================
+
+TASK_NAMES = [
+    "extract_wisdom",
+    "summarize_micro",
+    "extract_sponsors",
+    "extract_insights",
+    "extract_recommendations",
+    "one_sentence",
+    "custom_instructions",
+]
+
+TASK_LABELS = {
+    "extract_wisdom": "Full Summary (extract_wisdom)",
+    "summarize_micro": "Micro Summary",
+    "extract_sponsors": "Sponsor Extraction",
+    "extract_insights": "Insights Extraction",
+    "extract_recommendations": "Recommendations",
+    "one_sentence": "One-Sentence Summary",
+    "custom_instructions": "Custom Re-summarization",
+}
+
+
+class TaskModelOverride(BaseModel):
+    """Per-task LLM override. None fields fall back to global default."""
+
+    provider: Optional[Literal["anthropic", "ollama", "openrouter"]] = None
+    model: Optional[str] = None
+    ollama_base_url: Optional[str] = None
 
 
 # =============================================================================
@@ -14,6 +47,7 @@ class ArticleFeed(BaseModel):
 
     name: str
     url: HttpUrl
+    category: Optional[str] = None
     last_processed: Optional[datetime] = None
 
 
@@ -30,11 +64,19 @@ class Article(BaseModel):
     summary_path: Optional[Path] = None
 
 
+class OneSentenceSummary(BaseModel):
+    """A single-sentence summary of content."""
+
+    summary: str = Field(description="A single sentence (max 20 words) summarizing the content")
+
+
 class ArticleSummary(BaseModel):
     """Micro summary for articles based on summarize_micro pattern."""
 
     one_sentence_summary: str = Field(description="20-word summary of the article")
-    main_points: list[str] = Field(description="3 most important points (max 12 words each)")
+    main_points: list[str] = Field(
+        description="3 most important points (max 12 words each)"
+    )
     takeaways: list[str] = Field(description="3 best takeaways (max 12 words each)")
 
     def to_markdown(self, article_title: str, feed_name: str) -> str:
@@ -58,15 +100,40 @@ class ArticleSummary(BaseModel):
 class PodcastSummary(BaseModel):
     """Structured podcast summary based on Fabric's extract_wisdom pattern."""
 
-    summary: str = Field(description="A 25-word summary including who is presenting and the content being discussed")
-    ideas: list[str] = Field(description="20-50 surprising, insightful, or interesting ideas (each exactly 16 words)")
-    insights: list[str] = Field(description="10-20 refined, abstracted insights from the best ideas (each exactly 16 words)")
-    quotes: list[str] = Field(description="15-30 surprising, insightful quotes with speaker attribution")
-    habits: list[str] = Field(description="15-30 practical personal habits mentioned (each exactly 16 words)")
-    facts: list[str] = Field(description="15-30 interesting facts about the world mentioned (each exactly 16 words)")
-    references: list[str] = Field(description="All mentions of books, articles, tools, projects, or other sources")
-    one_sentence_takeaway: str = Field(description="The most potent takeaway in exactly 15 words")
-    recommendations: list[str] = Field(description="15-30 actionable recommendations (each exactly 16 words)")
+    summary: str = Field(
+        description="A 25-word summary including who is presenting and the content being discussed"
+    )
+    ideas: Optional[list[str]] = Field(
+        default_factory=list,
+        description="20-50 surprising, insightful, or interesting ideas (each exactly 16 words)",
+    )
+    insights: Optional[list[str]] = Field(
+        default_factory=list,
+        description="10-20 refined, abstracted insights from the best ideas (each exactly 16 words)",
+    )
+    quotes: Optional[list[str]] = Field(
+        default_factory=list,
+        description="15-30 surprising, insightful quotes with speaker attribution",
+    )
+    habits: Optional[list[str]] = Field(
+        default_factory=list,
+        description="15-30 practical personal habits mentioned (each exactly 16 words)",
+    )
+    facts: Optional[list[str]] = Field(
+        default_factory=list,
+        description="15-30 interesting facts about the world mentioned (each exactly 16 words)",
+    )
+    references: Optional[list[str]] = Field(
+        default_factory=list,
+        description="All mentions of books, articles, tools, projects, or other sources",
+    )
+    one_sentence_takeaway: Optional[str] = Field(
+        description="The most potent takeaway in exactly 15 words"
+    )
+    recommendations: Optional[list[str]] = Field(
+        default_factory=list,
+        description="15-30 actionable recommendations (each exactly 16 words)",
+    )
 
     def to_markdown(self, episode_title: str, podcast_name: str) -> str:
         md = f"# {podcast_name}: {episode_title}\n\n"
@@ -111,7 +178,9 @@ class PodcastSummary(BaseModel):
 class SponsorInfo(BaseModel):
     """Extracted sponsor information from a podcast."""
 
-    sponsors: list[str] = Field(description="List of official sponsors with format: 'Name | Description | URL'")
+    sponsors: Optional[list[str]] = Field(
+        description="List of official sponsors with format: 'Name | Description | URL'"
+    )
 
     def to_markdown(self) -> str:
         if not self.sponsors:
@@ -126,7 +195,9 @@ class MicroSummary(BaseModel):
     """Quick micro summary based on Fabric's summarize_micro pattern."""
 
     one_sentence_summary: str = Field(description="20-word summary of the content")
-    main_points: list[str] = Field(description="3 most important points (max 12 words each)")
+    main_points: list[str] = Field(
+        description="3 most important points (max 12 words each)"
+    )
     takeaways: list[str] = Field(description="3 best takeaways (max 12 words each)")
 
     def to_markdown(self, episode_title: str, podcast_name: str) -> str:
@@ -145,7 +216,9 @@ class MicroSummary(BaseModel):
 class Insights(BaseModel):
     """Extracted insights based on Fabric's extract_insights pattern."""
 
-    insights: list[str] = Field(description="10 surprising and novel insights (8 words each)")
+    insights: list[str] = Field(
+        description="10 surprising and novel insights (8 words each)"
+    )
 
     def to_markdown(self, episode_title: str, podcast_name: str) -> str:
         md = f"# {podcast_name}: {episode_title}\n\n"
@@ -158,7 +231,9 @@ class Insights(BaseModel):
 class Recommendations(BaseModel):
     """Extracted recommendations based on Fabric's extract_recommendations pattern."""
 
-    recommendations: list[str] = Field(description="Up to 20 practical recommendations (max 16 words each)")
+    recommendations: list[str] = Field(
+        description="Up to 20 practical recommendations (max 16 words each)"
+    )
 
     def to_markdown(self, episode_title: str, podcast_name: str) -> str:
         md = f"# {podcast_name}: {episode_title}\n\n"
@@ -183,6 +258,7 @@ class PodcastEpisode(BaseModel):
 class PodcastFeed(BaseModel):
     name: str
     url: HttpUrl
+    category: Optional[str] = None
     last_processed: Optional[datetime] = None
 
 
@@ -201,7 +277,9 @@ class AgentConfig(BaseModel):
     podcast_summary_dir: Path = Field(default_factory=lambda: Path("./summaries"))
 
     # Article directories
-    article_summary_dir: Path = Field(default_factory=lambda: Path("./article_summaries"))
+    article_summary_dir: Path = Field(
+        default_factory=lambda: Path("./article_summaries")
+    )
 
     db_path: Path = Field(default_factory=lambda: Path("./podcast_agent.db"))
     whisper_model: str = "base"
@@ -214,17 +292,45 @@ class AgentConfig(BaseModel):
     notes_folder: str = "Podcast Summaries"
 
     # LLM configuration
-    llm_provider: Literal["anthropic", "ollama"] = "ollama"
-    llm_model: str = "llama3.2"          # Used when provider=ollama
+    llm_provider: Literal["anthropic", "ollama", "openrouter"] = "ollama"
+    llm_model: str = "llama3.2"  # Used when provider=ollama
     anthropic_model: str = "claude-haiku-4-5"  # Used when provider=anthropic
+    openrouter_model: str = "anthropic/claude-haiku-4-5"  # Used when provider=openrouter
     ollama_base_url: str = "http://localhost:11434/v1"
+
+    # Per-task model overrides (optional, falls back to global defaults)
+    task_models: Dict[str, TaskModelOverride] = Field(default_factory=dict)
 
     @property
     def active_model(self) -> str:
         """Return the model name for the active provider."""
         if self.llm_provider == "anthropic":
             return self.anthropic_model
+        if self.llm_provider == "openrouter":
+            return self.openrouter_model
         return self.llm_model
+
+    def _resolve_model_for_provider(self, provider: str) -> str:
+        """Return the default model name for a given provider."""
+        if provider == "anthropic":
+            return self.anthropic_model
+        if provider == "openrouter":
+            return self.openrouter_model
+        return self.llm_model
+
+    def get_task_model_kwargs(self, task_name: str) -> dict:
+        """Return provider/model/ollama_base_url kwargs for a summarization task."""
+        override = self.task_models.get(task_name)
+        if override is None:
+            return {
+                "provider": self.llm_provider,
+                "model": self.active_model,
+                "ollama_base_url": self.ollama_base_url,
+            }
+        provider = override.provider or self.llm_provider
+        model = override.model or self._resolve_model_for_provider(provider)
+        base_url = override.ollama_base_url or self.ollama_base_url
+        return {"provider": provider, "model": model, "ollama_base_url": base_url}
 
     @model_validator(mode="after")
     def normalize_config(self) -> "AgentConfig":
@@ -252,3 +358,4 @@ class ProcessingResult(BaseModel):
     success: bool
     error_message: Optional[str] = None
     processing_time: float
+

@@ -1,14 +1,16 @@
+import json
 import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from .models import ArticleFeed, PodcastFeed
+from .models import ArticleFeed, PodcastFeed, TaskModelOverride
 
 
 def init_db(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS episodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +26,9 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             transcript_path TEXT,
             summary_path TEXT,
             discovered_at TEXT NOT NULL DEFAULT (datetime('now')),
+            one_sentence_summary TEXT,
             processed_at TEXT,
+            started_at TEXT,
             read_at TEXT,
             UNIQUE(podcast_name, audio_url)
         );
@@ -38,11 +42,13 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             author TEXT,
             content TEXT,
             description TEXT,
+            one_sentence_summary TEXT,
             status TEXT NOT NULL DEFAULT 'discovered',
             error_message TEXT,
             summary_path TEXT,
             discovered_at TEXT NOT NULL DEFAULT (datetime('now')),
             processed_at TEXT,
+            started_at TEXT,
             read_at TEXT,
             UNIQUE(feed_name, url)
         );
@@ -51,6 +57,7 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             url  TEXT NOT NULL,
+            category TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -58,6 +65,7 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             url  TEXT NOT NULL,
+            category TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -75,6 +83,11 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     """)
     _migrate_add_read_at(conn)
     _migrate_add_articles_to_runs(conn)
+    _migrate_add_started_at(conn)
+    _migrate_add_one_sentence_summary(conn)
+    _migrate_add_feed_category(conn)
+    _migrate_add_archived_at(conn)
+    _migrate_add_settings_table(conn)
     return conn
 
 
@@ -96,6 +109,92 @@ def _migrate_add_articles_to_runs(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE runs ADD COLUMN articles_processed INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE runs ADD COLUMN articles_failed INTEGER DEFAULT 0")
         conn.commit()
+
+
+def _migrate_add_started_at(conn: sqlite3.Connection) -> None:
+    """Add started_at column to episodes and articles if it doesn't exist."""
+    for table in ("episodes", "articles"):
+        columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "started_at" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN started_at TEXT")
+            conn.commit()
+
+
+def _migrate_add_one_sentence_summary(conn: sqlite3.Connection) -> None:
+    """Add one_sentence_summary column to episodes and articles if it doesn't exist."""
+    for table in ("episodes", "articles"):
+        columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "one_sentence_summary" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN one_sentence_summary TEXT")
+    conn.commit()
+
+
+def _migrate_add_feed_category(conn: sqlite3.Connection) -> None:
+    """Add category column to podcast_feeds and article_feeds if it doesn't exist."""
+    for table in ("podcast_feeds", "article_feeds"):
+        columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "category" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN category TEXT")
+    conn.commit()
+
+
+def _migrate_add_archived_at(conn: sqlite3.Connection) -> None:
+    """Add archived_at column to episodes and articles if it doesn't exist."""
+    for table in ("episodes", "articles"):
+        columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "archived_at" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN archived_at TEXT")
+    conn.commit()
+
+
+def _migrate_add_settings_table(conn: sqlite3.Connection) -> None:
+    """Create settings table if it doesn't exist."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+
+
+# =============================================================================
+# Settings CRUD (task model overrides)
+# =============================================================================
+
+
+def get_task_model_overrides(conn: sqlite3.Connection) -> dict[str, TaskModelOverride]:
+    """Read all task model overrides from the settings table."""
+    rows = conn.execute(
+        "SELECT key, value FROM settings WHERE key LIKE 'task_model:%'"
+    ).fetchall()
+    overrides = {}
+    for row in rows:
+        task_name = row["key"].removeprefix("task_model:")
+        overrides[task_name] = TaskModelOverride(**json.loads(row["value"]))
+    return overrides
+
+
+def set_task_model_override(
+    conn: sqlite3.Connection, task_name: str, override: TaskModelOverride
+) -> None:
+    """Save a per-task model override to the settings table."""
+    conn.execute(
+        """INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at""",
+        (f"task_model:{task_name}", override.model_dump_json()),
+    )
+    conn.commit()
+
+
+def delete_task_model_override(conn: sqlite3.Connection, task_name: str) -> None:
+    """Remove a per-task model override, reverting to the global default."""
+    conn.execute("DELETE FROM settings WHERE key = ?", (f"task_model:{task_name}",))
+    conn.commit()
+
+
+PROCESSING_STATUSES = ("downloading", "transcribing", "summarizing")
 
 
 def insert_episode(
@@ -146,6 +245,8 @@ def update_episode_status(
         updates.append("summary_path = ?")
         params.append(summary_path)
 
+    if status in PROCESSING_STATUSES:
+        updates.append("started_at = datetime('now')")
     if status in ("summarized", "failed"):
         updates.append("processed_at = datetime('now')")
 
@@ -153,6 +254,17 @@ def update_episode_status(
     conn.execute(
         f"UPDATE episodes SET {', '.join(updates)} WHERE id = ?",
         params,
+    )
+    conn.commit()
+
+
+def update_episode_one_sentence(
+    conn: sqlite3.Connection, episode_id: int, summary: str
+) -> None:
+    """Set the one-sentence summary for an episode."""
+    conn.execute(
+        "UPDATE episodes SET one_sentence_summary = ? WHERE id = ?",
+        (summary, episode_id),
     )
     conn.commit()
 
@@ -319,6 +431,8 @@ def update_article_status(
         updates.append("summary_path = ?")
         params.append(summary_path)
 
+    if status in PROCESSING_STATUSES:
+        updates.append("started_at = datetime('now')")
     if status in ("summarized", "failed"):
         updates.append("processed_at = datetime('now')")
 
@@ -326,6 +440,17 @@ def update_article_status(
     conn.execute(
         f"UPDATE articles SET {', '.join(updates)} WHERE id = ?",
         params,
+    )
+    conn.commit()
+
+
+def update_article_one_sentence(
+    conn: sqlite3.Connection, article_id: int, summary: str
+) -> None:
+    """Set the one-sentence summary for an article."""
+    conn.execute(
+        "UPDATE articles SET one_sentence_summary = ? WHERE id = ?",
+        (summary, article_id),
     )
     conn.commit()
 
@@ -360,6 +485,42 @@ def mark_article_read(conn: sqlite3.Connection, article_id: int) -> bool:
     """Mark an article as read. Returns True if the article was found and updated."""
     cursor = conn.execute(
         "UPDATE articles SET read_at = datetime('now') WHERE id = ?",
+        (article_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def archive_episode(conn: sqlite3.Connection, episode_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE episodes SET archived_at = datetime('now') WHERE id = ? AND archived_at IS NULL",
+        (episode_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def unarchive_episode(conn: sqlite3.Connection, episode_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE episodes SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL",
+        (episode_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def archive_article(conn: sqlite3.Connection, article_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE articles SET archived_at = datetime('now') WHERE id = ? AND archived_at IS NULL",
+        (article_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def unarchive_article(conn: sqlite3.Connection, article_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE articles SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL",
         (article_id,),
     )
     conn.commit()
@@ -457,9 +618,12 @@ def _episode_filters(
     date_from: Optional[str],
     date_to: Optional[str],
     search: Optional[str],
+    include_archived: bool = False,
 ) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
+    if not include_archived:
+        clauses.append("archived_at IS NULL")
     if podcast_name:
         clauses.append("podcast_name = ?")
         params.append(podcast_name)
@@ -487,6 +651,163 @@ def get_distinct_podcast_names(conn: sqlite3.Connection) -> list[str]:
     return [row["podcast_name"] for row in rows]
 
 
+def get_all_articles(
+    conn: sqlite3.Connection,
+    feed_name: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    """Fetch articles with optional filters for the web dashboard."""
+    where, params = _article_filters(feed_name, status, date_from, date_to, search)
+    query = f"SELECT * FROM articles{where} ORDER BY published_date DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    return conn.execute(query, params).fetchall()
+
+
+def get_article_count(
+    conn: sqlite3.Connection,
+    feed_name: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
+) -> int:
+    """Return total count matching the same filters as get_all_articles."""
+    where, params = _article_filters(feed_name, status, date_from, date_to, search)
+    return conn.execute(f"SELECT COUNT(*) as c FROM articles{where}", params).fetchone()["c"]
+
+
+def _article_filters(
+    feed_name: Optional[str],
+    status: Optional[str],
+    date_from: Optional[str],
+    date_to: Optional[str],
+    search: Optional[str],
+    include_archived: bool = False,
+) -> tuple[str, list]:
+    clauses: list[str] = []
+    params: list = []
+    if not include_archived:
+        clauses.append("archived_at IS NULL")
+    if feed_name:
+        clauses.append("feed_name = ?")
+        params.append(feed_name)
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    if date_from:
+        clauses.append("date(published_date) >= date(?)")
+        params.append(date_from)
+    if date_to:
+        clauses.append("date(published_date) <= date(?)")
+        params.append(date_to)
+    if search:
+        clauses.append("(title LIKE ? OR description LIKE ?)")
+        params.extend([f"%{search}%", f"%{search}%"])
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where, params
+
+
+def get_distinct_feed_names(conn: sqlite3.Connection) -> list[str]:
+    """Get all distinct article feed names for filter dropdowns."""
+    rows = conn.execute(
+        "SELECT DISTINCT feed_name FROM articles ORDER BY feed_name"
+    ).fetchall()
+    return [row["feed_name"] for row in rows]
+
+
+def reset_article_for_rerun(conn: sqlite3.Connection, article_id: int) -> None:
+    """Reset an article to 'discovered' status for re-summarization."""
+    conn.execute(
+        "UPDATE articles SET status='discovered', error_message=NULL, processed_at=NULL WHERE id=?",
+        (article_id,),
+    )
+    conn.commit()
+
+
+def get_unified_feed(
+    conn: sqlite3.Connection,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+    include_archived: bool = False,
+    archived_only: bool = False,
+    limit: int = 200,
+) -> list[dict]:
+    """Return a unified list of articles and episodes, newest first."""
+    clauses_ep: list[str] = []
+    clauses_art: list[str] = []
+    params_ep: list = []
+    params_art: list = []
+
+    if archived_only:
+        clauses_ep.append("e.archived_at IS NOT NULL")
+        clauses_art.append("a.archived_at IS NOT NULL")
+    elif not include_archived:
+        clauses_ep.append("e.archived_at IS NULL")
+        clauses_art.append("a.archived_at IS NULL")
+
+    if source:
+        clauses_ep.append("podcast_name = ?")
+        params_ep.append(source)
+        clauses_art.append("feed_name = ?")
+        params_art.append(source)
+    if search:
+        clauses_ep.append("(title LIKE ? OR description LIKE ?)")
+        params_ep.extend([f"%{search}%", f"%{search}%"])
+        clauses_art.append("(title LIKE ? OR description LIKE ?)")
+        params_art.extend([f"%{search}%", f"%{search}%"])
+
+    where_ep = (" AND " + " AND ".join(clauses_ep)) if clauses_ep else ""
+    where_art = (" AND " + " AND ".join(clauses_art)) if clauses_art else ""
+
+    query = f"""
+        SELECT e.id, 'episode' as kind, e.podcast_name as source, e.title,
+               e.published_date, e.status, e.one_sentence_summary, e.read_at,
+               COALESCE(pf.category, '') as category, e.archived_at
+        FROM episodes e
+        LEFT JOIN podcast_feeds pf ON pf.name = e.podcast_name
+        WHERE 1=1{where_ep.replace('podcast_name', 'e.podcast_name').replace('title', 'e.title').replace('description', 'e.description')}
+        UNION ALL
+        SELECT a.id, 'article' as kind, a.feed_name as source, a.title,
+               a.published_date, a.status, a.one_sentence_summary, a.read_at,
+               COALESCE(af.category, '') as category, a.archived_at
+        FROM articles a
+        LEFT JOIN article_feeds af ON af.name = a.feed_name
+        WHERE 1=1{where_art.replace('feed_name', 'a.feed_name').replace('title', 'a.title').replace('description', 'a.description')}
+        ORDER BY published_date DESC
+        LIMIT ?
+    """
+    params = params_ep + params_art + [limit]
+    rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_all_feed_sources(conn: sqlite3.Connection) -> list[str]:
+    """Get all distinct source names (podcast + article feed names) for filter dropdown."""
+    rows = conn.execute("""
+        SELECT DISTINCT podcast_name as name FROM episodes
+        UNION
+        SELECT DISTINCT feed_name as name FROM articles
+        ORDER BY name
+    """).fetchall()
+    return [row["name"] for row in rows]
+
+
+def get_all_feed_categories(conn: sqlite3.Connection) -> list[str]:
+    """Get all distinct non-empty categories across podcast and article feeds."""
+    rows = conn.execute("""
+        SELECT DISTINCT category FROM podcast_feeds WHERE category IS NOT NULL AND category != ''
+        UNION
+        SELECT DISTINCT category FROM article_feeds WHERE category IS NOT NULL AND category != ''
+        ORDER BY category
+    """).fetchall()
+    return [row["category"] for row in rows]
+
+
 def get_all_runs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Get all runs ordered by most recent first."""
     return conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()
@@ -499,15 +820,30 @@ def get_all_runs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 def get_podcast_feeds(conn: sqlite3.Connection) -> list[PodcastFeed]:
     """Return all podcast feeds as PodcastFeed model instances."""
-    rows = conn.execute("SELECT name, url FROM podcast_feeds ORDER BY name").fetchall()
-    return [PodcastFeed(name=row["name"], url=row["url"]) for row in rows]
+    rows = conn.execute("SELECT name, url, category FROM podcast_feeds ORDER BY name").fetchall()
+    return [PodcastFeed(name=row["name"], url=row["url"], category=row["category"]) for row in rows]
 
 
-def upsert_podcast_feed(conn: sqlite3.Connection, name: str, url: str) -> None:
-    conn.execute(
-        "INSERT OR REPLACE INTO podcast_feeds (name, url) VALUES (?, ?)",
-        (name, url),
-    )
+def upsert_podcast_feed(
+    conn: sqlite3.Connection, name: str, url: str, category: Optional[str] = None
+) -> None:
+    if category is not None:
+        conn.execute(
+            """INSERT INTO podcast_feeds (name, url, category) VALUES (?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url, category=excluded.category""",
+            (name, url, category),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO podcast_feeds (name, url) VALUES (?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url""",
+            (name, url),
+        )
+
+
+def update_podcast_feed_category(conn: sqlite3.Connection, name: str, category: str) -> None:
+    conn.execute("UPDATE podcast_feeds SET category = ? WHERE name = ?", (category, name))
+    conn.commit()
 
 
 def delete_podcast_feed(conn: sqlite3.Connection, name: str) -> None:
@@ -516,16 +852,59 @@ def delete_podcast_feed(conn: sqlite3.Connection, name: str) -> None:
 
 def get_article_feeds(conn: sqlite3.Connection) -> list[ArticleFeed]:
     """Return all article feeds as ArticleFeed model instances."""
-    rows = conn.execute("SELECT name, url FROM article_feeds ORDER BY name").fetchall()
-    return [ArticleFeed(name=row["name"], url=row["url"]) for row in rows]
+    rows = conn.execute("SELECT name, url, category FROM article_feeds ORDER BY name").fetchall()
+    return [ArticleFeed(name=row["name"], url=row["url"], category=row["category"]) for row in rows]
 
 
-def upsert_article_feed(conn: sqlite3.Connection, name: str, url: str) -> None:
-    conn.execute(
-        "INSERT OR REPLACE INTO article_feeds (name, url) VALUES (?, ?)",
-        (name, url),
-    )
+def upsert_article_feed(
+    conn: sqlite3.Connection, name: str, url: str, category: Optional[str] = None
+) -> None:
+    if category is not None:
+        conn.execute(
+            """INSERT INTO article_feeds (name, url, category) VALUES (?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url, category=excluded.category""",
+            (name, url, category),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO article_feeds (name, url) VALUES (?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url""",
+            (name, url),
+        )
+
+
+def update_article_feed_category(conn: sqlite3.Connection, name: str, category: str) -> None:
+    conn.execute("UPDATE article_feeds SET category = ? WHERE name = ?", (category, name))
+    conn.commit()
 
 
 def delete_article_feed(conn: sqlite3.Connection, name: str) -> None:
     conn.execute("DELETE FROM article_feeds WHERE name = ?", (name,))
+
+
+def get_podcast_feeds_with_stats(conn: sqlite3.Connection) -> list[dict]:
+    """Return podcast feeds with last item date and item count."""
+    rows = conn.execute("""
+        SELECT pf.name, pf.url, pf.category,
+               MAX(e.published_date) as last_item_date,
+               COUNT(e.id) as item_count
+        FROM podcast_feeds pf
+        LEFT JOIN episodes e ON pf.name = e.podcast_name
+        GROUP BY pf.id
+        ORDER BY COALESCE(pf.category, 'zzz'), pf.name
+    """).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_article_feeds_with_stats(conn: sqlite3.Connection) -> list[dict]:
+    """Return article feeds with last item date and item count."""
+    rows = conn.execute("""
+        SELECT af.name, af.url, af.category,
+               MAX(a.published_date) as last_item_date,
+               COUNT(a.id) as item_count
+        FROM article_feeds af
+        LEFT JOIN articles a ON af.name = a.feed_name
+        GROUP BY af.id
+        ORDER BY COALESCE(af.category, 'zzz'), af.name
+    """).fetchall()
+    return [dict(row) for row in rows]

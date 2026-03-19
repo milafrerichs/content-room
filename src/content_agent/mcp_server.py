@@ -44,6 +44,11 @@ def _get_config() -> AgentConfig:
     global _config
     if _config is None:
         _config = _load_config()
+        # Merge DB task model overrides on top of YAML config
+        conn = _get_conn()
+        db_overrides = db.get_task_model_overrides(conn)
+        for task_name, override in db_overrides.items():
+            _config.task_models[task_name] = override
     return _config
 
 
@@ -223,9 +228,7 @@ async def resummarize(episode_id: int, instructions: str) -> str:
     return await summarize_with_instructions(
         transcript,
         instructions,
-        provider=config.llm_provider,
-        model=config.active_model,
-        ollama_base_url=config.ollama_base_url,
+        **config.get_task_model_kwargs("custom_instructions"),
     )
 
 
@@ -510,9 +513,7 @@ async def resummarize_article(article_id: int, instructions: str) -> str:
     return await summarize_with_instructions(
         content,
         instructions,
-        provider=config.llm_provider,
-        model=config.active_model,
-        ollama_base_url=config.ollama_base_url,
+        **config.get_task_model_kwargs("custom_instructions"),
     )
 
 
@@ -545,9 +546,7 @@ async def get_sponsors(episode_id: int) -> str:
     config = _get_config()
     result = await extract_sponsors(
         transcript,
-        provider=config.llm_provider,
-        model=config.active_model,
-        ollama_base_url=config.ollama_base_url,
+        **config.get_task_model_kwargs("extract_sponsors"),
     )
     return result.to_markdown()
 
@@ -576,9 +575,7 @@ async def get_micro_summary(episode_id: int) -> str:
     config = _get_config()
     result = await summarize_micro(
         transcript,
-        provider=config.llm_provider,
-        model=config.active_model,
-        ollama_base_url=config.ollama_base_url,
+        **config.get_task_model_kwargs("summarize_micro"),
     )
     return result.to_markdown(row["title"], row["podcast_name"])
 
@@ -605,9 +602,7 @@ async def get_insights(episode_id: int) -> str:
     config = _get_config()
     result = await extract_insights(
         transcript,
-        provider=config.llm_provider,
-        model=config.active_model,
-        ollama_base_url=config.ollama_base_url,
+        **config.get_task_model_kwargs("extract_insights"),
     )
     return result.to_markdown(row["title"], row["podcast_name"])
 
@@ -636,9 +631,7 @@ async def get_recommendations(episode_id: int) -> str:
     config = _get_config()
     result = await extract_recommendations(
         transcript,
-        provider=config.llm_provider,
-        model=config.active_model,
-        ollama_base_url=config.ollama_base_url,
+        **config.get_task_model_kwargs("extract_recommendations"),
     )
     return result.to_markdown(row["title"], row["podcast_name"])
 

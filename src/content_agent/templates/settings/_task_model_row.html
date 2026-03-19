@@ -1,0 +1,53 @@
+<div id="task-row-{{ row.name }}" class="py-3">
+  <div class="flex items-center justify-between mb-2">
+    <div>
+      <span class="text-sm font-medium text-slate-700">{{ row.label }}</span>
+      {% if row.source == "db" %}
+        <span class="ml-2 mono text-xs px-1.5 py-0.5 rounded bg-accent-light text-accent-text">override</span>
+      {% elif row.source == "yaml" %}
+        <span class="ml-2 mono text-xs px-1.5 py-0.5 rounded bg-surface-100 text-slate-500">yaml</span>
+      {% else %}
+        <span class="ml-2 mono text-xs px-1.5 py-0.5 rounded bg-surface-50 text-slate-400">default</span>
+      {% endif %}
+    </div>
+    {% if row.source == "db" %}
+      <button
+        hx-delete="/settings/task-model/{{ row.name }}"
+        hx-target="#task-row-{{ row.name }}"
+        hx-swap="outerHTML"
+        class="text-xs text-slate-400 hover:text-red-500 transition-colors"
+      >Reset</button>
+    {% endif %}
+  </div>
+
+  <form
+    hx-post="/settings/task-model/{{ row.name }}"
+    hx-target="#task-row-{{ row.name }}"
+    hx-swap="outerHTML"
+    class="flex items-end gap-3"
+  >
+    <div class="flex-1">
+      <label class="block text-xs text-slate-400 mb-1">Provider</label>
+      <select name="provider" class="form-input w-full rounded-lg px-3 py-2 text-sm">
+        <option value="" {% if not row.provider %}selected{% endif %}>(global default)</option>
+        <option value="anthropic" {% if row.provider == "anthropic" %}selected{% endif %}>anthropic</option>
+        <option value="ollama" {% if row.provider == "ollama" %}selected{% endif %}>ollama</option>
+        <option value="openrouter" {% if row.provider == "openrouter" %}selected{% endif %}>openrouter</option>
+      </select>
+    </div>
+    <div class="flex-[2]">
+      <label class="block text-xs text-slate-400 mb-1">Model</label>
+      <input
+        type="text"
+        name="model"
+        value="{{ row.model or '' }}"
+        placeholder="{{ config.active_model }}"
+        class="form-input w-full rounded-lg px-3 py-2 text-sm"
+      />
+    </div>
+    <button
+      type="submit"
+      class="px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-text transition-colors"
+    >Save</button>
+  </form>
+</div>

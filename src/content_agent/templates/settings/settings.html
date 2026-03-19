@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="px-8 py-8 max-w-4xl fade-in">
+
+  <h1 class="text-xl font-semibold text-slate-800 mb-6">Settings</h1>
+
+  <!-- Global LLM defaults -->
+  <div class="bg-white border border-surface-200 rounded-xl p-5 mb-6">
+    <div class="mono text-xs text-slate-400 tracking-wider mb-3">GLOBAL LLM DEFAULT</div>
+    <div class="grid grid-cols-3 gap-4 text-sm">
+      <div>
+        <span class="text-slate-400">Provider</span>
+        <div class="mono text-slate-700 mt-0.5">{{ config.llm_provider }}</div>
+      </div>
+      <div>
+        <span class="text-slate-400">Model</span>
+        <div class="mono text-slate-700 mt-0.5">{{ config.active_model }}</div>
+      </div>
+      <div>
+        <span class="text-slate-400">Ollama URL</span>
+        <div class="mono text-slate-700 mt-0.5 truncate">{{ config.ollama_base_url }}</div>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mt-3">Global defaults are set in config.yaml. Tasks without an override use these values.</p>
+  </div>
+
+  <!-- Per-task model overrides -->
+  <div class="bg-white border border-surface-200 rounded-xl p-5">
+    <div class="mono text-xs text-slate-400 tracking-wider mb-4">PER-TASK MODEL OVERRIDES</div>
+
+    <div class="space-y-0 divide-y divide-surface-100">
+      {% for row in task_rows %}
+        {% include "settings/_task_model_row.html" %}
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

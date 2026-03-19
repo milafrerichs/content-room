@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Feed{% endblock %}
+
+{% block content %}
+<div class="p-8 fade-in">
+
+  <!-- Page header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <div class="mono text-xs text-accent tracking-widest mb-1">TIMELINE</div>
+      <h1 class="text-2xl font-semibold text-slate-800">Feed</h1>
+    </div>
+    <a href="/feeds"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-surface-200 text-slate-500 text-sm rounded-lg hover:border-surface-300 hover:text-slate-700 transition-colors mono text-xs">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>
+      </svg>
+      Manage Feeds
+    </a>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white border border-surface-200 rounded-xl p-5 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+
+      <!-- Source -->
+      <div>
+        <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">SOURCE</label>
+        <select
+          name="source"
+          hx-get="/feed"
+          hx-target="body"
+          hx-push-url="true"
+          hx-include="[name='search'],[name='view'],[name='category']"
+          class="form-input w-full rounded-lg px-3 py-2 text-sm"
+        >
+          <option value="">All sources</option>
+          {% for s in sources %}
+          <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Search -->
+      <div>
+        <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">SEARCH</label>
+        <div class="relative">
+          <input
+            type="text"
+            name="search"
+            value="{{ filters.search or '' }}"
+            placeholder="Title or description..."
+            class="form-input w-full rounded-lg pl-8 pr-3 py-2 text-sm"
+            hx-get="/feed"
+            hx-target="body"
+            hx-push-url="true"
+            hx-trigger="keyup delay:300ms, change"
+            hx-include="[name='source'],[name='view'],[name='category']"
+          />
+          <svg class="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden field to track active view -->
+  <input type="hidden" name="view" value="{{ filters.view }}" />
+  <input type="hidden" name="category" value="{{ filters.category or '' }}" />
+
+  <!-- Tab bar -->
+  <div class="flex items-center gap-1 mb-6 bg-white border border-surface-200 rounded-xl p-1">
+    <button
+      hx-get="/feed"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='source'],[name='search']"
+      hx-vals='{"view": "timeline"}'
+      class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+        {% if filters.view == 'timeline' %}bg-accent text-white{% else %}text-slate-500 hover:bg-surface-50 hover:text-slate-700{% endif %}"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      By Day
+    </button>
+    <button
+      hx-get="/feed"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='source'],[name='search']"
+      hx-vals='{"view": "category"}'
+      class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+        {% if filters.view == 'category' %}bg-accent text-white{% else %}text-slate-500 hover:bg-surface-50 hover:text-slate-700{% endif %}"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+      </svg>
+      By Category
+    </button>
+  </div>
+
+  {% if filters.view == 'category' %}
+  <!-- ==================== CATEGORY VIEW ==================== -->
+
+  {% if categories %}
+  <!-- Category filter pills -->
+  <div class="flex flex-wrap items-center gap-2 mb-6">
+    <button
+      hx-get="/feed"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='source'],[name='search']"
+      hx-vals='{"view": "category"}'
+      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+        {% if not filters.category %}bg-accent text-white border-accent{% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300{% endif %}"
+    >All</button>
+    {% for cat in categories %}
+    <button
+      hx-get="/feed"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='source'],[name='search']"
+      hx-vals='{"view": "category", "category": "{{ cat }}"}'
+      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+        {% if filters.category == cat %}bg-accent text-white border-accent{% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300{% endif %}"
+    >{{ cat }}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if sorted_categories %}
+  <div class="space-y-4">
+    {% for cat in sorted_categories %}
+    <details class="bg-white border border-surface-200 rounded-xl overflow-hidden group" open>
+      <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-50 transition-colors select-none">
+        <div class="flex items-center gap-3">
+          {% if cat %}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-accent-light text-accent-text border border-accent/20">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+            </svg>
+            {{ cat }}
+          </span>
+          {% else %}
+          <div class="mono text-sm font-medium text-slate-400">Uncategorized</div>
+          {% endif %}
+          <span class="mono text-xs text-slate-400 bg-surface-100 border border-surface-200 rounded-full px-2 py-0.5">
+            {{ by_category[cat] | length }}
+          </span>
+        </div>
+        <svg class="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </summary>
+
+      <div class="border-t border-surface-200 divide-y divide-surface-100">
+        {% for item in by_category[cat] %}
+        {% include "feed/_feed_item.html" %}
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  {% include "feed/_empty_feed.html" %}
+  {% endif %}
+
+  {% else %}
+  <!-- ==================== TIMELINE VIEW (default) ==================== -->
+
+  {% if sorted_days %}
+  <div class="space-y-4">
+    {% for day in sorted_days %}
+    {% set is_today = (day == today) %}
+    <details class="bg-white border border-surface-200 rounded-xl overflow-hidden group" {% if is_today %}open{% endif %}>
+      <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-50 transition-colors select-none">
+        <div class="flex items-center gap-3">
+          <div class="mono text-sm font-medium {% if is_today %}text-accent{% else %}text-slate-600{% endif %}">
+            {% if is_today %}Today{% else %}{{ day }}{% endif %}
+          </div>
+          <span class="mono text-xs text-slate-400 bg-surface-100 border border-surface-200 rounded-full px-2 py-0.5">
+            {{ grouped[day] | length }}
+          </span>
+        </div>
+        <svg class="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </summary>
+
+      <div class="border-t border-surface-200 divide-y divide-surface-100">
+        {% for item in grouped[day] %}
+        {% include "feed/_feed_item.html" %}
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  {% include "feed/_empty_feed.html" %}
+  {% endif %}
+
+  {% endif %}
+
+</div>
+{% endblock %}

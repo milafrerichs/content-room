@@ -42,7 +42,9 @@ notes_folder: "Podcast Summaries"
 # llm_provider: "ollama" (default, local) or "anthropic" (cloud)
 # llm_model: Ollama model name, used when provider=ollama
 # anthropic_model: Anthropic model name, used when provider=anthropic
-llm_provider: "ollama"
-llm_model: "llama3.2"
+llm_provider: "openrouter"
+llm_model: "ministral-3:8b"
 anthropic_model: "claude-haiku-4-5"
 # ollama_base_url: "http://localhost:11434/v1"  # Uncomment to customize Ollama URL
+# llm_provider: "openrouter"  # Uses OPENROUTER_API_KEY env var
+openrouter_model: "google/gemini-3.1-flash-lite-preview" #anthropic/claude-haiku-4-5"  # See openrouter.ai/models for options

@@ -107,19 +107,26 @@
         </svg>
         Dashboard
       </a>
+      <a href="/feed"
+         class="nav-link {% if request.url.path == '/feed' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>
+        </svg>
+        Feed
+      </a>
+      <a href="/feeds"
+         class="nav-link {% if request.url.path.startswith('/feeds') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+        </svg>
+        Manage Feeds
+      </a>
       <a href="/episodes"
          class="nav-link {% if request.url.path.startswith('/episodes') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
         </svg>
         Episodes
-      </a>
-      <a href="/podcasts"
-         class="nav-link {% if request.url.path.startswith('/podcasts') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.536 8.464a5 5 0 010 7.072M12 10a2 2 0 110 4 2 2 0 010-4zm6.364-4.364a9 9 0 010 12.728M8.464 8.464a5 5 0 000 7.072M5.636 5.636a9 9 0 000 12.728"/>
-        </svg>
-        Podcasts
       </a>
       <a href="/articles"
          class="nav-link {% if request.url.path.startswith('/articles') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
@@ -128,12 +135,27 @@
         </svg>
         Articles
       </a>
+      <a href="/archive"
+         class="nav-link {% if request.url.path == '/archive' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+        </svg>
+        Archive
+      </a>
       <a href="/runs"
          class="nav-link {% if request.url.path == '/runs' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
         Run History
+      </a>
+      <a href="/settings"
+         class="nav-link {% if request.url.path.startswith('/settings') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Settings
       </a>
     </nav>
 

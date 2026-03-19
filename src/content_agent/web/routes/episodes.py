@@ -5,12 +5,14 @@ from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, Response
 
 from content_agent.db import (
+    archive_episode,
     get_all_episodes,
     get_distinct_podcast_names,
     get_episode_by_id,
     get_episode_count,
     mark_episode_read,
     reset_episode_for_rerun,
+    unarchive_episode,
 )
 from content_agent.web.deps import get_conn
 from content_agent.web.processing import run_rerun_episode
@@ -146,6 +148,32 @@ def mark_read(request: Request, episode_id: int):
     conn = get_conn(request)
     try:
         mark_episode_read(conn, episode_id)
+    finally:
+        conn.close()
+    return Response(
+        status_code=200,
+        headers={"HX-Redirect": f"/episodes/{episode_id}"},
+    )
+
+
+@router.post("/{episode_id}/archive")
+def archive(request: Request, episode_id: int):
+    conn = get_conn(request)
+    try:
+        archive_episode(conn, episode_id)
+    finally:
+        conn.close()
+    return Response(
+        status_code=200,
+        headers={"HX-Redirect": f"/episodes/{episode_id}"},
+    )
+
+
+@router.post("/{episode_id}/unarchive")
+def unarchive(request: Request, episode_id: int):
+    conn = get_conn(request)
+    try:
+        unarchive_episode(conn, episode_id)
     finally:
         conn.close()
     return Response(

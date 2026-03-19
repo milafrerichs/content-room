@@ -10,7 +10,7 @@ from content_agent.models import AgentConfig
 
 def create_app(config: AgentConfig) -> FastAPI:
     # Import routes here to avoid circular imports at module level
-    from content_agent.web.routes import articles, dashboard, episodes, podcasts, runs
+    from content_agent.web.routes import articles, dashboard, episodes, feed, podcasts, runs, settings
 
     app = FastAPI(title="Podcast Agent Dashboard")
 
@@ -28,10 +28,12 @@ def create_app(config: AgentConfig) -> FastAPI:
     app.state.templates = templates
 
     app.include_router(dashboard.router)
+    app.include_router(feed.router)
     app.include_router(episodes.router)
     app.include_router(podcasts.router)
     app.include_router(articles.router)
     app.include_router(runs.router)
+    app.include_router(settings.router)
 
     @app.on_event("startup")
     async def seed_feeds():
@@ -42,6 +44,10 @@ def create_app(config: AgentConfig) -> FastAPI:
             for f in (config.article_feeds or []):
                 db.upsert_article_feed(conn, f.name, str(f.url))
             conn.commit()
+            # Merge DB task model overrides into config
+            db_overrides = db.get_task_model_overrides(conn)
+            for task_name, override in db_overrides.items():
+                config.task_models[task_name] = override
         finally:
             conn.close()
 

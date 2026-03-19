@@ -4,8 +4,9 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-from .models import Insights, MicroSummary, PodcastSummary, Recommendations, SponsorInfo
+from .models import Insights, MicroSummary, OneSentenceSummary, PodcastSummary, Recommendations, SponsorInfo
 
 # =============================================================================
 # FABRIC PATTERN: extract_wisdom
@@ -109,6 +110,11 @@ Take a deep breath and think step by step about how to best accomplish this goal
 - Ignore any advertisements or sponsor segments."""
 
 # =============================================================================
+# One-sentence summary (lightweight, for article discovery)
+# =============================================================================
+_ONE_SENTENCE_INSTRUCTIONS = """You are an expert content summarizer. Given a piece of content, produce a single sentence of no more than 20 words that captures the core topic and key takeaway. Be concise and factual. Do not add information not present in the content. Ignore any advertisements or sponsor segments."""
+
+# =============================================================================
 # FABRIC PATTERN: extract_insights
 # =============================================================================
 _EXTRACT_INSIGHTS_INSTRUCTIONS = """# IDENTITY and PURPOSE
@@ -152,11 +158,14 @@ Take the input given and extract the concise, practical recommendations that are
 # =============================================================================
 # Agent cache and model helpers
 # =============================================================================
+import logging
+
 _agents: dict[str, Agent] = {}
+logger = logging.getLogger(__name__)
 
 
 def _get_model_spec(
-    provider: Literal["anthropic", "ollama"],
+    provider: Literal["anthropic", "ollama", "openrouter"],
     model: str,
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> str | OpenAIModel:
@@ -169,6 +178,8 @@ def _get_model_spec(
         # calling, which is far more compatible with small/local Ollama models.
         profile = ModelProfile(default_structured_output_mode="prompted")
         return OpenAIModel(model, provider=ollama_provider, profile=profile)
+    elif provider == "openrouter":
+        return OpenAIModel(model, provider=OpenRouterProvider())
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
@@ -177,7 +188,7 @@ def _get_agent(
     pattern: str,
     output_type: type,
     instructions: str,
-    provider: Literal["anthropic", "ollama"] = "ollama",
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
     model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> Agent:
@@ -189,6 +200,7 @@ def _get_agent(
             model_spec,
             output_type=output_type,
             instructions=instructions,
+            retries=3,
         )
     return _agents[cache_key]
 
@@ -197,9 +209,10 @@ def _get_agent(
 # Public API
 # =============================================================================
 
+
 async def extract_sponsors(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "ollama",
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
     model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> SponsorInfo:
@@ -224,13 +237,20 @@ async def extract_sponsors(
         model,
         ollama_base_url,
     )
-    result = await agent.run(transcript)
-    return result.output
+    try:
+        result = await agent.run(transcript)
+        return result.output
+    except Exception as e:
+        logger.error(
+            f"extract_sponsors agent.run failed [{provider}/{model}]: {type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        raise
 
 
 async def summarize_micro(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "ollama",
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
     model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> MicroSummary:
@@ -259,7 +279,7 @@ async def summarize_micro(
 
 async def extract_insights(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "ollama",
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
     model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> Insights:
@@ -288,7 +308,7 @@ async def extract_insights(
 
 async def extract_recommendations(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "ollama",
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
     model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> Recommendations:
@@ -317,7 +337,7 @@ async def extract_recommendations(
 
 async def summarize_transcript(
     transcript: str,
-    provider: Literal["anthropic", "ollama"] = "ollama",
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
     model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> PodcastSummary:
@@ -340,14 +360,44 @@ async def summarize_transcript(
         model,
         ollama_base_url,
     )
-    result = await agent.run(transcript)
-    return result.output
+    try:
+        result = await agent.run(transcript)
+        return result.output
+    except Exception as e:
+        logger.error(
+            f"summarize_transcript agent.run failed [{provider}/{model}]: {type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        raise
+
+
+async def summarize_one_sentence(
+    content: str,
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
+    model: str = "llama3.2",
+    ollama_base_url: str = "http://localhost:11434/v1",
+) -> str:
+    """Generate a single-sentence summary of content.
+
+    Returns:
+        A single sentence (max 20 words) summarizing the content.
+    """
+    agent = _get_agent(
+        "one_sentence",
+        OneSentenceSummary,
+        _ONE_SENTENCE_INSTRUCTIONS,
+        provider,
+        model,
+        ollama_base_url,
+    )
+    result = await agent.run(content)
+    return result.output.summary
 
 
 async def summarize_with_instructions(
     transcript: str,
     instructions: str,
-    provider: Literal["anthropic", "ollama"] = "ollama",
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
     model: str = "llama3.2",
     ollama_base_url: str = "http://localhost:11434/v1",
 ) -> str:

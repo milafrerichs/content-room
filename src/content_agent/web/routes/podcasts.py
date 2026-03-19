@@ -45,6 +45,26 @@ async def create_podcast(request: Request, name: str = Form(...), url: str = For
     })
 
 
+@router.post("/sync", response_class=HTMLResponse)
+def sync_podcast_feeds(request: Request):
+    """Sync podcast feeds from config.yaml into the database."""
+    config = request.app.state.config
+    conn = get_conn(request)
+    try:
+        for pf in config.podcast_feeds:
+            db.upsert_podcast_feed(conn, pf.name, str(pf.url))
+        conn.commit()
+        feeds = db.get_podcast_feeds(conn)
+    finally:
+        conn.close()
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse("podcasts/_feeds_list.html", {
+        "request": request,
+        "feeds": feeds,
+    })
+
+
 @router.delete("/{podcast_name}", response_class=HTMLResponse)
 def delete_podcast(request: Request, podcast_name: str):
     conn = get_conn(request)

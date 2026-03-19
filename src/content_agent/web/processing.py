@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from content_agent.agent import ContentAgent
-from content_agent.models import AgentConfig, PodcastEpisode
+from content_agent.models import AgentConfig, Article, PodcastEpisode
 from content_agent import db
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ async def rerun_episode(episode_id: int, config: AgentConfig) -> None:
             db.update_episode_status(conn, episode_id, "summarized", summary_path=str(episode.summary_path))
 
         elif start_status == "downloaded":
-            if not agent.transcribe_episode(episode):
+            if not await agent.transcribe_episode_async(episode):
                 db.update_episode_status(conn, episode_id, "failed", error_message="Failed to transcribe")
                 return
             db.update_episode_status(conn, episode_id, "transcribed", transcript_path=str(episode.transcript_path))
@@ -55,7 +55,7 @@ async def rerun_episode(episode_id: int, config: AgentConfig) -> None:
 
         else:
             # "discovered" — run the full pipeline
-            await agent.process_episode(episode, conn, episode_id)
+            await agent.process_episode(episode, Path(str(config.db_path)), episode_id)
 
     except Exception as e:
         logger.error(f"Rerun failed for episode {episode_id}: {e}")
@@ -70,3 +70,40 @@ async def rerun_episode(episode_id: int, config: AgentConfig) -> None:
 def run_rerun_episode(episode_id: int, config: AgentConfig) -> None:
     """Sync wrapper for FastAPI BackgroundTasks (runs in a threadpool thread)."""
     asyncio.run(rerun_episode(episode_id, config))
+
+
+async def rerun_article(article_id: int, config: AgentConfig) -> None:
+    """Re-summarize an article."""
+    conn = sqlite3.connect(str(config.db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
+        if row is None:
+            logger.error(f"Article {article_id} not found for rerun")
+            return
+
+        agent = ContentAgent(config=config)
+        article = Article(
+            title=row["title"],
+            url=row["url"],
+            published_date=row["published_date"],
+            author=row["author"],
+            content=row["content"],
+            description=row["description"],
+            feed_name=row["feed_name"],
+        )
+        await agent.process_article(article, Path(str(config.db_path)), article_id)
+
+    except Exception as e:
+        logger.error(f"Rerun failed for article {article_id}: {e}")
+        try:
+            db.update_article_status(conn, article_id, "failed", error_message=str(e))
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+def run_rerun_article(article_id: int, config: AgentConfig) -> None:
+    """Sync wrapper for FastAPI BackgroundTasks."""
+    asyncio.run(rerun_article(article_id, config))

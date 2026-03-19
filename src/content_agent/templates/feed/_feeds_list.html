@@ -1,0 +1,125 @@
+{% for category, feeds in grouped_feeds.items() %}
+<div class="mb-6">
+  <div class="mono text-xs tracking-wider mb-3 {% if category %}text-accent{% else %}text-slate-400{% endif %}">
+    {{ category | upper if category else "UNCATEGORIZED" }}
+    <span class="text-slate-300 ml-1">({{ feeds | length }})</span>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for feed in feeds %}
+    <div class="card bg-white border border-surface-200 rounded-xl p-4" id="feed-{{ feed.type }}-{{ feed.name | replace(' ', '-') }}">
+      <div class="flex items-start justify-between gap-2 mb-2">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            {% if feed.type == "podcast" %}
+            <div class="w-5 h-5 rounded bg-violet-50 border border-violet-200 flex items-center justify-center flex-shrink-0">
+              <svg class="w-2.5 h-2.5 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M12 10a2 2 0 110 4 2 2 0 010-4z"/>
+              </svg>
+            </div>
+            {% else %}
+            <div class="w-5 h-5 rounded bg-sky-50 border border-sky-200 flex items-center justify-center flex-shrink-0">
+              <svg class="w-2.5 h-2.5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7"/>
+              </svg>
+            </div>
+            {% endif %}
+            <h3 class="text-sm font-semibold text-slate-800 truncate">{{ feed.name }}</h3>
+          </div>
+          <p class="mono text-xs text-slate-400 truncate" title="{{ feed.url }}">{{ feed.url }}</p>
+        </div>
+        <button
+          hx-delete="/feeds/{{ feed.type }}/{{ feed.name }}"
+          hx-target="#feed-{{ feed.type }}-{{ feed.name | replace(' ', '-') }}"
+          hx-swap="outerHTML"
+          hx-confirm="Delete '{{ feed.name }}'?"
+          class="flex-shrink-0 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+          title="Delete feed"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Stats row -->
+      <div class="flex items-center gap-3 mb-2 text-xs text-slate-400">
+        <span class="mono">
+          {% if feed.item_count %}
+            {{ feed.item_count }} item{{ 's' if feed.item_count != 1 }}
+          {% else %}
+            No items
+          {% endif %}
+        </span>
+        <span class="text-slate-200">|</span>
+        <span class="mono">
+          {% if feed.last_item_date %}
+            Last: {{ feed.last_item_date[:10] }}
+          {% else %}
+            Never fetched
+          {% endif %}
+        </span>
+      </div>
+
+      <!-- Category badge (inline edit) -->
+      <div class="category-display" id="cat-display-{{ feed.type }}-{{ feed.name | replace(' ', '-') }}">
+        <button
+          onclick="this.parentElement.style.display='none'; document.getElementById('cat-edit-{{ feed.type }}-{{ feed.name | replace(' ', '-') }}').style.display='flex';"
+          class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors
+            {% if feed.category %}
+              bg-accent-light text-accent-text border border-accent/20 hover:bg-accent/10
+            {% else %}
+              bg-surface-100 text-slate-400 border border-surface-200 hover:bg-surface-200
+            {% endif %}"
+          title="Click to edit category"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+          </svg>
+          {{ feed.category if feed.category else "Add category" }}
+        </button>
+      </div>
+      <form
+        id="cat-edit-{{ feed.type }}-{{ feed.name | replace(' ', '-') }}"
+        style="display: none;"
+        class="flex items-center gap-1.5"
+        hx-post="/feeds/{{ feed.type }}/{{ feed.name }}/category"
+        hx-target="#feeds-container"
+        hx-swap="innerHTML"
+      >
+        <input
+          type="text"
+          name="category"
+          value="{{ feed.category or '' }}"
+          placeholder="Category"
+          class="form-input rounded px-2 py-0.5 text-xs w-24"
+          autofocus
+          onkeydown="if(event.key==='Escape'){this.closest('form').style.display='none'; document.getElementById('cat-display-{{ feed.type }}-{{ feed.name | replace(' ', '-') }}').style.display='block';}"
+        />
+        <button type="submit" class="text-accent hover:text-accent-text transition-colors" title="Save">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+        </button>
+        <button
+          type="button"
+          onclick="this.closest('form').style.display='none'; document.getElementById('cat-display-{{ feed.type }}-{{ feed.name | replace(' ', '-') }}').style.display='block';"
+          class="text-slate-400 hover:text-slate-600 transition-colors"
+          title="Cancel"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+{% if not grouped_feeds %}
+<div class="bg-white border border-surface-200 rounded-xl p-6 text-center">
+  <p class="text-slate-400 text-sm">No feeds yet. Add one above or sync from config.</p>
+</div>
+{% endif %}
