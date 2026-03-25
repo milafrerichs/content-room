@@ -38,6 +38,7 @@
       hx-post="/feeds/podcast/create"
       hx-target="#feeds-container"
       hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) this.reset()"
       class="flex items-end gap-3"
     >
       <div class="flex-1">
@@ -72,16 +73,17 @@
       hx-post="/feeds/article/create"
       hx-target="#feeds-container"
       hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) this.reset()"
       class="flex items-end gap-3"
     >
-      <div class="flex-1">
-        <label class="block mono text-xs text-slate-400 tracking-wider mb-1">NAME</label>
-        <input type="text" name="name" placeholder="Tech Blog" required
+      <div class="flex-[2]">
+        <label class="block mono text-xs text-slate-400 tracking-wider mb-1">WEBSITE OR RSS URL</label>
+        <input type="url" name="url" placeholder="https://blog.example.com" required
                class="form-input w-full rounded-lg px-3 py-2 text-sm" />
       </div>
-      <div class="flex-[2]">
-        <label class="block mono text-xs text-slate-400 tracking-wider mb-1">RSS URL</label>
-        <input type="url" name="url" placeholder="https://blog.example.com/rss" required
+      <div class="flex-1">
+        <label class="block mono text-xs text-slate-400 tracking-wider mb-1">NAME <span class="text-slate-300">(optional)</span></label>
+        <input type="text" name="name" placeholder="Auto-detected from feed"
                class="form-input w-full rounded-lg px-3 py-2 text-sm" />
       </div>
       <div class="w-32">
@@ -97,6 +99,7 @@
         Add
       </button>
     </form>
+    <div id="article-feed-error"></div>
   </div>
 
   <!-- Feeds list -->

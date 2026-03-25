@@ -107,3 +107,43 @@ async def rerun_article(article_id: int, config: AgentConfig) -> None:
 def run_rerun_article(article_id: int, config: AgentConfig) -> None:
     """Sync wrapper for FastAPI BackgroundTasks."""
     asyncio.run(rerun_article(article_id, config))
+
+
+async def download_single_episode(episode_id: int, config: AgentConfig) -> None:
+    """Download + transcribe a single episode by ID (full pipeline from 'discovered')."""
+    conn = sqlite3.connect(str(config.db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("SELECT * FROM episodes WHERE id = ?", (episode_id,)).fetchone()
+        if row is None:
+            logger.error(f"Episode {episode_id} not found for download")
+            return
+
+        episode = PodcastEpisode(
+            title=row["title"],
+            description=row["description"],
+            audio_url=row["audio_url"],
+            published_date=row["published_date"],
+            duration=row["duration"],
+            podcast_name=row["podcast_name"],
+            local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
+            transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
+            summary_path=Path(row["summary_path"]) if row["summary_path"] else None,
+        )
+
+        agent = ContentAgent(config=config)
+        await agent.process_episode(episode, Path(str(config.db_path)), episode_id)
+
+    except Exception as e:
+        logger.error(f"Download failed for episode {episode_id}: {e}")
+        try:
+            db.update_episode_status(conn, episode_id, "failed", error_message=str(e))
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+def run_download_single_episode(episode_id: int, config: AgentConfig) -> None:
+    """Sync wrapper for FastAPI BackgroundTasks."""
+    asyncio.run(download_single_episode(episode_id, config))

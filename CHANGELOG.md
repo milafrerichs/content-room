@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-03-25
+
+### Added
+
+- **Podcast feed detail page**: Click any podcast feed to see all episodes from its RSS feed at `/feeds/podcast/{name}/episodes`, with status badges showing which episodes are new, downloaded, transcribed, summarized, or failed
+- **Per-episode download**: Download individual episodes directly from the podcast detail page via HTMX — each episode row has a Download button that triggers background processing
+- **RSS feed auto-discovery**: When adding an article feed, paste any website URL (e.g. `https://simonwillison.net`) and the system automatically discovers the RSS/Atom feed via `<link rel="alternate">` tags or common feed paths (`/feed`, `/rss`, `/atom.xml`, etc.)
+- **Auto-fill feed name**: Leave the name field blank when adding an article feed and the feed title is used automatically
+- **RSS caching**: Podcast feed RSS responses are cached in-memory for 15 minutes to speed up repeated page loads
+- **Episode description excerpts**: Episode rows in the podcast detail page show a truncated description from the RSS entry
+- **Reader mode**: Article and episode detail pages support a reader mode with centered content and hidden sidebar
+- **Clickable feed cards**: Podcast feed cards on the management page navigate to the detail page on click
+
+### Changed
+
+- Sidebar navigation: fixed SVG icons not rendering (Jinja2 auto-escaping), fixed collapse/expand toggle being inaccessible when minimized, toggle button now always visible
+- Feed management: removed download form from feed overview cards (moved to podcast detail page)
+- Article feed form: URL field is now primary (first position), labeled "WEBSITE OR RSS URL"; name field is optional
+- Add feed forms reset fields after successful submission
+
+### Fixed
+
+- Sidebar icons were HTML-escaped by Jinja2 (`{{ icon_path }}` → `{{ icon_path | safe }}`)
+- Sidebar could not be expanded once collapsed — `overflow-hidden` clipped the toggle button and responsive classes conflicted with JS state
+- Sidebar toggle was hidden on medium-width screens due to `hidden lg:flex` class
+
 ## [0.7.0] - 2026-03-19
 
 ### Added

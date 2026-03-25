@@ -1,15 +1,64 @@
+import asyncio
+import logging
+import time
+from datetime import datetime
 from typing import Optional
 from collections import defaultdict
 from datetime import date
 from itertools import groupby
-
-from fastapi import APIRouter, Form, Request
+import feedparser
+from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from content_agent import db
+from content_agent.feed_discovery import discover_feed
 from content_agent.web.deps import get_conn
+from content_agent.web.processing import run_download_single_episode
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# In-memory RSS cache: { feed_url: (timestamp, parsed_episodes) }
+_rss_cache: dict[str, tuple[float, list[dict]]] = {}
+_RSS_CACHE_TTL = 15 * 60  # 15 minutes
+
+
+def _fetch_rss_episodes(feed_url: str) -> list[dict]:
+    """Fetch and parse RSS episodes, returning cached results if fresh."""
+    now = time.time()
+    cached = _rss_cache.get(feed_url)
+    if cached and (now - cached[0]) < _RSS_CACHE_TTL:
+        return cached[1]
+
+    parsed = feedparser.parse(feed_url)
+    episodes = []
+    for entry in parsed.entries:
+        audio_url = None
+        for link in entry.get("links", []):
+            if link.get("type", "").startswith("audio/"):
+                audio_url = link["href"]
+                break
+
+        if not audio_url:
+            continue
+
+        pub_date = ""
+        if hasattr(entry, "published_parsed") and entry.published_parsed:
+            pub_date = datetime.fromtimestamp(
+                time.mktime(entry.published_parsed)
+            ).isoformat()
+
+        episodes.append({
+            "title": entry.get("title", "Untitled"),
+            "audio_url": audio_url,
+            "published_date": pub_date,
+            "duration": entry.get("itunes_duration", ""),
+            "description": entry.get("description", ""),
+        })
+
+    _rss_cache[feed_url] = (now, episodes)
+    return episodes
 
 
 def _feeds_context(conn):
@@ -208,19 +257,30 @@ def create_podcast_feed(
 @router.post("/feeds/article/create", response_class=HTMLResponse)
 def create_article_feed(
     request: Request,
-    name: str = Form(...),
+    name: str = Form(""),
     url: str = Form(...),
     category: str = Form(""),
 ):
+    templates = request.app.state.templates
+
+    feed_url, feed_title = discover_feed(url)
+    if feed_url is None:
+        return HTMLResponse(
+            '<div class="text-red-600 text-sm py-2">'
+            "Could not find an RSS or Atom feed at that URL."
+            "</div>",
+            status_code=422,
+        )
+
+    feed_name = name.strip() or feed_title or url
     conn = get_conn(request)
     try:
-        db.upsert_article_feed(conn, name, url, category=category or None)
+        db.upsert_article_feed(conn, feed_name, feed_url, category=category or None)
         conn.commit()
         ctx = _feeds_context(conn)
     finally:
         conn.close()
 
-    templates = request.app.state.templates
     return templates.TemplateResponse(
         "feed/_feeds_list.html",
         {"request": request, **ctx},
@@ -266,6 +326,130 @@ def update_article_category(
     return templates.TemplateResponse(
         "feed/_feeds_list.html",
         {"request": request, **ctx},
+    )
+
+
+def _run_download(feed_name: str, count: int, config):
+    """Background task: download N episodes for a podcast feed."""
+    from content_agent.agent import ContentAgent
+
+    agent = ContentAgent(config=config)
+    results = asyncio.run(agent.download_podcast(feed_name, count))
+    ok = sum(1 for r in results if r.success)
+    logger.info("Download complete for %s: %d/%d succeeded", feed_name, ok, len(results))
+
+
+@router.post("/feeds/podcast/{feed_name}/download", response_class=HTMLResponse)
+def download_episodes(
+    request: Request,
+    feed_name: str,
+    background_tasks: BackgroundTasks,
+    count: int = Form(1),
+):
+    """Download N recent episodes for a podcast feed in the background."""
+    config = request.app.state.config
+    background_tasks.add_task(_run_download, feed_name, count, config)
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/_download_status.html",
+        {"request": request, "feed_name": feed_name, "count": count},
+    )
+
+
+@router.get("/feeds/podcast/{feed_name}/episodes", response_class=HTMLResponse)
+def podcast_feed_detail(request: Request, feed_name: str):
+    """Show all RSS episodes for a podcast feed with DB status."""
+    conn = get_conn(request)
+    try:
+        feed_row = db.get_podcast_feed_by_name(conn, feed_name)
+        if feed_row is None:
+            return HTMLResponse("Feed not found", status_code=404)
+
+        feed_url = feed_row["url"]
+        rss_episodes = _fetch_rss_episodes(feed_url)
+
+        # Look up DB status for each episode
+        db_episodes = db.get_episodes_by_podcast(conn, feed_name)
+
+        merged = []
+        for ep in rss_episodes:
+            db_row = db_episodes.get(ep["audio_url"])
+            merged.append({
+                **ep,
+                "status": db_row["status"] if db_row else "new",
+                "episode_id": db_row["id"] if db_row else None,
+            })
+
+        # Sort by published date descending
+        merged.sort(key=lambda e: e["published_date"], reverse=True)
+
+    finally:
+        conn.close()
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/podcast_detail.html",
+        {
+            "request": request,
+            "feed_name": feed_name,
+            "feed_url": feed_url,
+            "episodes": merged,
+        },
+    )
+
+
+@router.post("/feeds/podcast/{feed_name}/download-episode", response_class=HTMLResponse)
+def download_single_episode(
+    request: Request,
+    feed_name: str,
+    background_tasks: BackgroundTasks,
+    audio_url: str = Form(...),
+    title: str = Form(...),
+    published_date: str = Form(""),
+    duration: str = Form(""),
+    description: str = Form(""),
+):
+    """Insert an episode into DB and kick off download+processing."""
+    config = request.app.state.config
+    conn = get_conn(request)
+    try:
+        db.insert_episode(
+            conn,
+            podcast_name=feed_name,
+            title=title,
+            audio_url=audio_url,
+            published_date=published_date,
+            duration=duration or None,
+            description=description or None,
+        )
+        # Get the episode ID
+        row = conn.execute(
+            "SELECT id FROM episodes WHERE podcast_name = ? AND audio_url = ?",
+            (feed_name, audio_url),
+        ).fetchone()
+        episode_id = row["id"]
+    finally:
+        conn.close()
+
+    background_tasks.add_task(run_download_single_episode, episode_id, config)
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/_episode_row.html",
+        {
+            "request": request,
+            "ep": {
+                "title": title,
+                "audio_url": audio_url,
+                "published_date": published_date,
+                "duration": duration,
+                "description": description,
+                "status": "downloading",
+                "episode_id": episode_id,
+            },
+            "feed_name": feed_name,
+        },
     )
 
 

@@ -882,6 +882,21 @@ def delete_article_feed(conn: sqlite3.Connection, name: str) -> None:
     conn.execute("DELETE FROM article_feeds WHERE name = ?", (name,))
 
 
+def get_podcast_feed_by_name(conn: sqlite3.Connection, name: str) -> Optional[sqlite3.Row]:
+    """Get a single podcast feed by name."""
+    return conn.execute(
+        "SELECT * FROM podcast_feeds WHERE name = ?", (name,)
+    ).fetchone()
+
+
+def get_episodes_by_podcast(conn: sqlite3.Connection, podcast_name: str) -> dict[str, sqlite3.Row]:
+    """Return all episodes for a podcast, keyed by audio_url for fast lookup."""
+    rows = conn.execute(
+        "SELECT * FROM episodes WHERE podcast_name = ?", (podcast_name,)
+    ).fetchall()
+    return {row["audio_url"]: row for row in rows}
+
+
 def get_podcast_feeds_with_stats(conn: sqlite3.Connection) -> list[dict]:
     """Return podcast feeds with last item date and item count."""
     rows = conn.execute("""

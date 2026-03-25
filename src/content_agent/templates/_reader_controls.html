@@ -1,0 +1,72 @@
+<!-- Reader mode + font size controls -->
+<div class="flex items-center gap-2">
+  <!-- Font size (visible only in reader mode) -->
+  <div id="font-controls" class="hidden items-center gap-0.5 bg-white border border-surface-200 rounded-lg overflow-hidden">
+    <button id="font-decrease"
+            class="px-2 py-1.5 text-slate-500 hover:bg-surface-50 hover:text-slate-700 transition-colors mono text-xs font-bold"
+            title="Decrease font size">A-</button>
+    <span id="font-size-label" class="px-1.5 py-1.5 text-xs mono text-slate-400 border-x border-surface-200 min-w-[3rem] text-center">100%</span>
+    <button id="font-increase"
+            class="px-2 py-1.5 text-slate-500 hover:bg-surface-50 hover:text-slate-700 transition-colors mono text-xs font-bold"
+            title="Increase font size">A+</button>
+  </div>
+
+  <!-- Reader toggle -->
+  <button id="reader-toggle"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-surface-200 text-slate-500 text-sm rounded-lg hover:border-surface-300 hover:text-slate-700 transition-colors mono text-xs"
+          title="Toggle reader mode">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+    </svg>
+    <span id="reader-label">Reader</span>
+  </button>
+</div>
+
+<script>
+(function() {
+  const toggle = document.getElementById('reader-toggle');
+  const label = document.getElementById('reader-label');
+  const fontControls = document.getElementById('font-controls');
+  const fontLabel = document.getElementById('font-size-label');
+  const prose = document.querySelector('.prose-content');
+  const STEPS = [90, 100, 115, 130, 150];
+  const STORAGE_KEY = 'reader-font-step';
+  let stepIdx = STEPS.indexOf(parseInt(localStorage.getItem(STORAGE_KEY)) || 100);
+  if (stepIdx < 0) stepIdx = 1;
+
+  function applyFontSize() {
+    var pct = STEPS[stepIdx];
+    fontLabel.textContent = pct + '%';
+    document.querySelectorAll('.prose-content').forEach(function(el) {
+      el.style.fontSize = (pct / 100) + 'rem';
+      el.style.lineHeight = String(1.6 + (pct - 90) * 0.005);
+    });
+    localStorage.setItem(STORAGE_KEY, pct);
+  }
+
+  document.getElementById('font-decrease').addEventListener('click', function() {
+    if (stepIdx > 0) { stepIdx--; applyFontSize(); }
+  });
+  document.getElementById('font-increase').addEventListener('click', function() {
+    if (stepIdx < STEPS.length - 1) { stepIdx++; applyFontSize(); }
+  });
+
+  function setReaderMode(on) {
+    document.documentElement.classList.toggle('reader-mode', on);
+    label.textContent = on ? 'Exit Reader' : 'Reader';
+    toggle.classList.toggle('bg-accent', on);
+    toggle.classList.toggle('text-white', on);
+    toggle.classList.toggle('border-accent', on);
+    toggle.classList.toggle('bg-white', !on);
+    toggle.classList.toggle('text-slate-500', !on);
+    toggle.classList.toggle('border-surface-200', !on);
+    fontControls.classList.toggle('hidden', !on);
+    fontControls.classList.toggle('flex', on);
+    if (on) applyFontSize();
+  }
+
+  toggle.addEventListener('click', function() {
+    setReaderMode(!document.documentElement.classList.contains('reader-mode'));
+  });
+})();
+</script>

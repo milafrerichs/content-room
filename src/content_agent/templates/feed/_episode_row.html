@@ -1,0 +1,89 @@
+<tr id="ep-{{ ep.audio_url | replace('/', '-') | replace(':', '-') | truncate(60, True, '') }}"
+    class="border-b border-surface-200 last:border-0">
+  <td class="py-3 px-4 mono text-xs text-slate-400 whitespace-nowrap">
+    {{ ep.published_date[:10] if ep.published_date else "—" }}
+  </td>
+  <td class="py-3 px-4">
+    <div class="text-sm text-slate-700">
+      {% if ep.status in ("downloaded", "transcribed", "summarized") and ep.episode_id %}
+        <a href="/episodes/{{ ep.episode_id }}" class="text-accent hover:underline">{{ ep.title }}</a>
+      {% else %}
+        {{ ep.title }}
+      {% endif %}
+    </div>
+    {% if ep.description %}
+      <p class="text-xs text-slate-400 mt-0.5 line-clamp-2">{{ ep.description | striptags | truncate(150) }}</p>
+    {% endif %}
+  </td>
+  <td class="py-3 px-4 mono text-xs text-slate-400 whitespace-nowrap">
+    {{ ep.duration if ep.duration else "—" }}
+  </td>
+  <td class="py-3 px-4">
+    {% if ep.status == "new" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">New</span>
+    {% elif ep.status == "discovered" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">Discovered</span>
+    {% elif ep.status == "downloading" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-600">Downloading...</span>
+    {% elif ep.status == "downloaded" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Downloaded</span>
+    {% elif ep.status == "transcribing" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-600">Transcribing...</span>
+    {% elif ep.status == "transcribed" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-50 text-cyan-700">Transcribed</span>
+    {% elif ep.status == "summarizing" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-50 text-cyan-600">Summarizing...</span>
+    {% elif ep.status == "summarized" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Summarized</span>
+    {% elif ep.status == "failed" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">Failed</span>
+    {% else %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">{{ ep.status }}</span>
+    {% endif %}
+  </td>
+  <td class="py-3 px-4 text-right">
+    {% if ep.status == "new" %}
+      <form
+        hx-post="/feeds/podcast/{{ feed_name }}/download-episode"
+        hx-target="closest tr"
+        hx-swap="outerHTML"
+      >
+        <input type="hidden" name="audio_url" value="{{ ep.audio_url }}" />
+        <input type="hidden" name="title" value="{{ ep.title }}" />
+        <input type="hidden" name="published_date" value="{{ ep.published_date }}" />
+        <input type="hidden" name="duration" value="{{ ep.duration or '' }}" />
+        <input type="hidden" name="description" value="{{ ep.description or '' }}" />
+        <button type="submit"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-violet-50 border border-violet-200 text-violet-700 hover:bg-violet-100 transition-colors">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Download
+        </button>
+      </form>
+    {% elif ep.status == "failed" %}
+      <form
+        hx-post="/feeds/podcast/{{ feed_name }}/download-episode"
+        hx-target="closest tr"
+        hx-swap="outerHTML"
+      >
+        <input type="hidden" name="audio_url" value="{{ ep.audio_url }}" />
+        <input type="hidden" name="title" value="{{ ep.title }}" />
+        <input type="hidden" name="published_date" value="{{ ep.published_date }}" />
+        <input type="hidden" name="duration" value="{{ ep.duration or '' }}" />
+        <input type="hidden" name="description" value="{{ ep.description or '' }}" />
+        <button type="submit"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-colors">
+          Retry
+        </button>
+      </form>
+    {% elif ep.status in ("downloaded", "transcribed", "summarized") and ep.episode_id %}
+      <a href="/episodes/{{ ep.episode_id }}"
+         class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 transition-colors">
+        View
+      </a>
+    {% elif ep.status in ("downloading", "transcribing", "summarizing") %}
+      <span class="mono text-xs text-slate-400">Processing...</span>
+    {% endif %}
+  </td>
+</tr>

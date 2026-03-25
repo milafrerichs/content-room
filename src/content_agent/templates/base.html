@@ -44,6 +44,11 @@
     .nav-link:hover { background: #f1f5f9; border-left-color: #cbd5e1; color: #334155; }
     .nav-link.active { background: #e0f2fe; border-left-color: #0891b2; color: #0e7490; }
 
+    /* Collapsed nav */
+    .sidebar-collapsed .nav-link { justify-content: center; padding-left: 0; padding-right: 0; border-left: none; border-bottom: 2px solid transparent; border-radius: 0.375rem; }
+    .sidebar-collapsed .nav-link:hover { border-bottom-color: #cbd5e1; border-left: none; }
+    .sidebar-collapsed .nav-link.active { border-bottom-color: #0891b2; border-left: none; }
+
     /* Card hover */
     .card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
     .card:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px #e2e8f0; }
@@ -77,98 +82,139 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .fade-in { animation: fadeIn 0.25s ease forwards; }
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* Sidebar transition */
+    #sidebar { transition: width 0.2s ease; }
+    #sidebar .nav-label { transition: opacity 0.15s ease; }
+    #sidebar.sidebar-collapsed .nav-label { opacity: 0; width: 0; overflow: hidden; }
+    #sidebar.sidebar-collapsed .logo-text { display: none; }
+    #sidebar.sidebar-collapsed .footer-text { display: none; }
   </style>
+  {% block head %}{% endblock %}
 </head>
 <body class="h-full flex text-slate-700">
 
   <!-- Sidebar -->
-  <aside class="w-56 flex-shrink-0 bg-white border-r border-surface-200 flex flex-col overflow-hidden" style="height: 100vh; position: sticky; top: 0;">
+  <aside id="sidebar" class="w-56 flex-shrink-0 bg-white border-r border-surface-200 flex flex-col" style="height: 100vh; position: sticky; top: 0; overflow-y: auto; overflow-x: hidden;">
     <!-- Logo area -->
-    <div class="px-5 py-6 border-b border-surface-200">
+    <div class="px-5 py-6 border-b border-surface-200 flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <div class="w-7 h-7 rounded-md bg-accent-light border border-accent/30 flex items-center justify-center flex-shrink-0">
           <svg class="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
           </svg>
         </div>
-        <div>
+        <div class="logo-text">
           <div class="mono text-xs text-accent font-bold leading-tight tracking-wide">PODCAST</div>
           <div class="mono text-xs text-slate-400 leading-tight tracking-widest">CONTROL ROOM</div>
         </div>
       </div>
+      <!-- Toggle button -->
+      <button id="sidebar-toggle" class="flex p-1 text-slate-400 hover:text-slate-600 rounded transition-colors" title="Toggle sidebar">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Navigation -->
     <nav class="flex-1 px-3 py-4 space-y-0.5">
-      <a href="/"
-         class="nav-link {% if request.url.path == '/' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
+      {% macro nav_item(href, match, label, icon_path) %}
+      <a href="{{ href }}"
+         class="nav-link {% if match %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium"
+         title="{{ label }}">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+          {{ icon_path | safe }}
         </svg>
-        Dashboard
+        <span class="nav-label">{{ label }}</span>
       </a>
-      <a href="/feed"
-         class="nav-link {% if request.url.path == '/feed' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>
-        </svg>
-        Feed
-      </a>
-      <a href="/feeds"
-         class="nav-link {% if request.url.path.startswith('/feeds') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
-        </svg>
-        Manage Feeds
-      </a>
-      <a href="/episodes"
-         class="nav-link {% if request.url.path.startswith('/episodes') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-        </svg>
-        Episodes
-      </a>
-      <a href="/articles"
-         class="nav-link {% if request.url.path.startswith('/articles') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/>
-        </svg>
-        Articles
-      </a>
-      <a href="/archive"
-         class="nav-link {% if request.url.path == '/archive' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
-        </svg>
-        Archive
-      </a>
-      <a href="/runs"
-         class="nav-link {% if request.url.path == '/runs' %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        Run History
-      </a>
-      <a href="/settings"
-         class="nav-link {% if request.url.path.startswith('/settings') %}active{% endif %} flex items-center gap-3 px-3 py-2.5 rounded-r-md text-sm text-slate-500 font-medium">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-        </svg>
-        Settings
-      </a>
+      {% endmacro %}
+
+      {{ nav_item("/", request.url.path == '/', "Dashboard",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>') }}
+
+      {{ nav_item("/feed", request.url.path == '/feed', "Feed",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>') }}
+
+      {{ nav_item("/feeds", request.url.path.startswith('/feeds'), "Manage Feeds",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>') }}
+
+      {{ nav_item("/episodes", request.url.path.startswith('/episodes'), "Episodes",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>') }}
+
+      {{ nav_item("/articles", request.url.path.startswith('/articles'), "Articles",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/>') }}
+
+      {{ nav_item("/archive", request.url.path == '/archive', "Archive",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>') }}
+
+      {{ nav_item("/runs", request.url.path == '/runs', "Run History",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>') }}
+
+      {{ nav_item("/settings", request.url.path.startswith('/settings'), "Settings",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>') }}
     </nav>
 
     <!-- Footer -->
     <div class="px-5 py-4 border-t border-surface-200">
-      <div class="mono text-xs text-slate-400 tracking-wider">v1.0 · local</div>
+      <div class="mono text-xs text-slate-400 tracking-wider"><span class="footer-text">v1.0 · </span>local</div>
     </div>
   </aside>
 
   <!-- Main content -->
-  <main class="flex-1 overflow-y-auto">
+  <main class="flex-1 overflow-y-auto min-w-0">
     {% block content %}{% endblock %}
   </main>
+
+  <script>
+    (function() {
+      const sidebar = document.getElementById('sidebar');
+      const toggle = document.getElementById('sidebar-toggle');
+      const storageKey = 'sidebar-collapsed';
+
+      function applyCollapsed(collapsed) {
+        if (collapsed) {
+          sidebar.classList.add('sidebar-collapsed');
+          sidebar.style.width = '3.5rem';
+          sidebar.querySelectorAll('.nav-label').forEach(el => el.style.display = 'none');
+          sidebar.querySelectorAll('.logo-text').forEach(el => el.style.display = 'none');
+          sidebar.querySelectorAll('.footer-text').forEach(el => el.style.display = 'none');
+          sidebar.querySelectorAll('nav a').forEach(el => { el.style.justifyContent = 'center'; el.style.paddingLeft = '0'; el.style.paddingRight = '0'; });
+          sidebar.querySelector('nav').style.paddingLeft = '0.25rem';
+          sidebar.querySelector('nav').style.paddingRight = '0.25rem';
+          if (toggle) {
+            toggle.querySelector('svg').innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>';
+          }
+        } else {
+          sidebar.classList.remove('sidebar-collapsed');
+          sidebar.style.width = '';
+          sidebar.querySelectorAll('.nav-label').forEach(el => el.style.display = '');
+          sidebar.querySelectorAll('.logo-text').forEach(el => el.style.display = '');
+          sidebar.querySelectorAll('.footer-text').forEach(el => el.style.display = '');
+          sidebar.querySelectorAll('nav a').forEach(el => { el.style.justifyContent = ''; el.style.paddingLeft = ''; el.style.paddingRight = ''; });
+          sidebar.querySelector('nav').style.paddingLeft = '';
+          sidebar.querySelector('nav').style.paddingRight = '';
+          if (toggle) {
+            toggle.querySelector('svg').innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>';
+          }
+        }
+      }
+
+      // Restore state on desktop
+      if (window.innerWidth >= 1024 && localStorage.getItem(storageKey) === 'true') {
+        applyCollapsed(true);
+      }
+
+      if (toggle) {
+        toggle.addEventListener('click', function() {
+          const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+          applyCollapsed(!isCollapsed);
+          localStorage.setItem(storageKey, !isCollapsed);
+        });
+      }
+    })();
+  </script>
 
 </body>
 </html>
