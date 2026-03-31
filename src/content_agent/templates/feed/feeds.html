@@ -56,6 +56,11 @@
         <input type="text" name="category" placeholder="e.g. Tech"
                class="form-input w-full rounded-lg px-3 py-2 text-sm" />
       </div>
+      <div class="flex items-center gap-2 pb-1">
+        <input type="checkbox" name="auto_summarize" value="true" id="podcast-auto-summarize"
+               class="rounded border-surface-300 text-accent focus:ring-accent" />
+        <label for="podcast-auto-summarize" class="mono text-xs text-slate-400 whitespace-nowrap">Auto-summarize</label>
+      </div>
       <button type="submit"
               class="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-text transition-colors whitespace-nowrap">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,6 +95,11 @@
         <label class="block mono text-xs text-slate-400 tracking-wider mb-1">CATEGORY</label>
         <input type="text" name="category" placeholder="e.g. Health"
                class="form-input w-full rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <div class="flex items-center gap-2 pb-1">
+        <input type="checkbox" name="auto_summarize" value="true" id="article-auto-summarize"
+               class="rounded border-surface-300 text-accent focus:ring-accent" />
+        <label for="article-auto-summarize" class="mono text-xs text-slate-400 whitespace-nowrap">Auto-summarize</label>
       </div>
       <button type="submit"
               class="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-text transition-colors whitespace-nowrap">

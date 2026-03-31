@@ -149,6 +149,12 @@
       {{ nav_item("/archive", request.url.path == '/archive', "Archive",
          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>') }}
 
+      {{ nav_item("/read-later", request.url.path == '/read-later', "Read Later",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>') }}
+
+      {{ nav_item("/mobile", request.url.path == '/mobile', "Mobile",
+         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>') }}
+
       {{ nav_item("/runs", request.url.path == '/runs', "Run History",
          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>') }}
 

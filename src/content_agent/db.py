@@ -88,6 +88,8 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     _migrate_add_feed_category(conn)
     _migrate_add_archived_at(conn)
     _migrate_add_settings_table(conn)
+    _migrate_add_auto_summarize(conn)
+    _migrate_add_read_later_at(conn)
     return conn
 
 
@@ -156,6 +158,24 @@ def _migrate_add_settings_table(conn: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    conn.commit()
+
+
+def _migrate_add_auto_summarize(conn: sqlite3.Connection) -> None:
+    """Add auto_summarize column to feed tables if it doesn't exist."""
+    for table in ("podcast_feeds", "article_feeds"):
+        columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "auto_summarize" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN auto_summarize INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
+def _migrate_add_read_later_at(conn: sqlite3.Connection) -> None:
+    """Add read_later_at column to episodes and articles if it doesn't exist."""
+    for table in ("episodes", "articles"):
+        columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "read_later_at" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN read_later_at TEXT")
     conn.commit()
 
 
@@ -527,6 +547,54 @@ def unarchive_article(conn: sqlite3.Connection, article_id: int) -> bool:
     return cursor.rowcount > 0
 
 
+def mark_episode_read_later(conn: sqlite3.Connection, episode_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE episodes SET read_later_at = datetime('now') WHERE id = ? AND read_later_at IS NULL",
+        (episode_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def unmark_episode_read_later(conn: sqlite3.Connection, episode_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE episodes SET read_later_at = NULL WHERE id = ? AND read_later_at IS NOT NULL",
+        (episode_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def mark_article_read_later(conn: sqlite3.Connection, article_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE articles SET read_later_at = datetime('now') WHERE id = ? AND read_later_at IS NULL",
+        (article_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def unmark_article_read_later(conn: sqlite3.Connection, article_id: int) -> bool:
+    cursor = conn.execute(
+        "UPDATE articles SET read_later_at = NULL WHERE id = ? AND read_later_at IS NOT NULL",
+        (article_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_episode(conn: sqlite3.Connection, episode_id: int) -> bool:
+    cursor = conn.execute("DELETE FROM episodes WHERE id = ?", (episode_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_article(conn: sqlite3.Connection, article_id: int) -> bool:
+    cursor = conn.execute("DELETE FROM articles WHERE id = ?", (article_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
 def get_feed_stats(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Get article feed names with unread/total article counts."""
     return conn.execute(
@@ -735,6 +803,7 @@ def get_unified_feed(
     search: Optional[str] = None,
     include_archived: bool = False,
     archived_only: bool = False,
+    read_later_only: bool = False,
     limit: int = 200,
 ) -> list[dict]:
     """Return a unified list of articles and episodes, newest first."""
@@ -749,6 +818,10 @@ def get_unified_feed(
     elif not include_archived:
         clauses_ep.append("e.archived_at IS NULL")
         clauses_art.append("a.archived_at IS NULL")
+
+    if read_later_only:
+        clauses_ep.append("e.read_later_at IS NOT NULL")
+        clauses_art.append("a.read_later_at IS NOT NULL")
 
     if source:
         clauses_ep.append("podcast_name = ?")
@@ -767,14 +840,16 @@ def get_unified_feed(
     query = f"""
         SELECT e.id, 'episode' as kind, e.podcast_name as source, e.title,
                e.published_date, e.status, e.one_sentence_summary, e.read_at,
-               COALESCE(pf.category, '') as category, e.archived_at
+               COALESCE(pf.category, '') as category, e.archived_at,
+               e.read_later_at, e.description
         FROM episodes e
         LEFT JOIN podcast_feeds pf ON pf.name = e.podcast_name
         WHERE 1=1{where_ep.replace('podcast_name', 'e.podcast_name').replace('title', 'e.title').replace('description', 'e.description')}
         UNION ALL
         SELECT a.id, 'article' as kind, a.feed_name as source, a.title,
                a.published_date, a.status, a.one_sentence_summary, a.read_at,
-               COALESCE(af.category, '') as category, a.archived_at
+               COALESCE(af.category, '') as category, a.archived_at,
+               a.read_later_at, a.description
         FROM articles a
         LEFT JOIN article_feeds af ON af.name = a.feed_name
         WHERE 1=1{where_art.replace('feed_name', 'a.feed_name').replace('title', 'a.title').replace('description', 'a.description')}
@@ -784,6 +859,33 @@ def get_unified_feed(
     params = params_ep + params_art + [limit]
     rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_unified_feed_item(conn: sqlite3.Connection, kind: str, item_id: int) -> Optional[dict]:
+    """Fetch a single unified feed item by kind and id."""
+    if kind == "episode":
+        row = conn.execute(
+            """SELECT e.id, 'episode' as kind, e.podcast_name as source, e.title,
+                      e.published_date, e.status, e.one_sentence_summary, e.read_at,
+                      COALESCE(pf.category, '') as category, e.archived_at,
+                      e.read_later_at, e.description
+               FROM episodes e
+               LEFT JOIN podcast_feeds pf ON pf.name = e.podcast_name
+               WHERE e.id = ?""",
+            (item_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """SELECT a.id, 'article' as kind, a.feed_name as source, a.title,
+                      a.published_date, a.status, a.one_sentence_summary, a.read_at,
+                      COALESCE(af.category, '') as category, a.archived_at,
+                      a.read_later_at, a.description
+               FROM articles a
+               LEFT JOIN article_feeds af ON af.name = a.feed_name
+               WHERE a.id = ?""",
+            (item_id,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def get_all_feed_sources(conn: sqlite3.Connection) -> list[str]:
@@ -820,18 +922,31 @@ def get_all_runs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 def get_podcast_feeds(conn: sqlite3.Connection) -> list[PodcastFeed]:
     """Return all podcast feeds as PodcastFeed model instances."""
-    rows = conn.execute("SELECT name, url, category FROM podcast_feeds ORDER BY name").fetchall()
-    return [PodcastFeed(name=row["name"], url=row["url"], category=row["category"]) for row in rows]
+    rows = conn.execute("SELECT name, url, category, auto_summarize FROM podcast_feeds ORDER BY name").fetchall()
+    return [PodcastFeed(name=row["name"], url=row["url"], category=row["category"], auto_summarize=bool(row["auto_summarize"])) for row in rows]
 
 
 def upsert_podcast_feed(
-    conn: sqlite3.Connection, name: str, url: str, category: Optional[str] = None
+    conn: sqlite3.Connection, name: str, url: str, category: Optional[str] = None,
+    auto_summarize: Optional[bool] = None,
 ) -> None:
-    if category is not None:
+    if category is not None and auto_summarize is not None:
+        conn.execute(
+            """INSERT INTO podcast_feeds (name, url, category, auto_summarize) VALUES (?, ?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url, category=excluded.category, auto_summarize=excluded.auto_summarize""",
+            (name, url, category, int(auto_summarize)),
+        )
+    elif category is not None:
         conn.execute(
             """INSERT INTO podcast_feeds (name, url, category) VALUES (?, ?, ?)
                ON CONFLICT(name) DO UPDATE SET url=excluded.url, category=excluded.category""",
             (name, url, category),
+        )
+    elif auto_summarize is not None:
+        conn.execute(
+            """INSERT INTO podcast_feeds (name, url, auto_summarize) VALUES (?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url, auto_summarize=excluded.auto_summarize""",
+            (name, url, int(auto_summarize)),
         )
     else:
         conn.execute(
@@ -846,24 +961,42 @@ def update_podcast_feed_category(conn: sqlite3.Connection, name: str, category: 
     conn.commit()
 
 
+def update_podcast_feed_auto_summarize(conn: sqlite3.Connection, name: str, auto_summarize: bool) -> None:
+    conn.execute("UPDATE podcast_feeds SET auto_summarize = ? WHERE name = ?", (int(auto_summarize), name))
+    conn.commit()
+
+
 def delete_podcast_feed(conn: sqlite3.Connection, name: str) -> None:
     conn.execute("DELETE FROM podcast_feeds WHERE name = ?", (name,))
 
 
 def get_article_feeds(conn: sqlite3.Connection) -> list[ArticleFeed]:
     """Return all article feeds as ArticleFeed model instances."""
-    rows = conn.execute("SELECT name, url, category FROM article_feeds ORDER BY name").fetchall()
-    return [ArticleFeed(name=row["name"], url=row["url"], category=row["category"]) for row in rows]
+    rows = conn.execute("SELECT name, url, category, auto_summarize FROM article_feeds ORDER BY name").fetchall()
+    return [ArticleFeed(name=row["name"], url=row["url"], category=row["category"], auto_summarize=bool(row["auto_summarize"])) for row in rows]
 
 
 def upsert_article_feed(
-    conn: sqlite3.Connection, name: str, url: str, category: Optional[str] = None
+    conn: sqlite3.Connection, name: str, url: str, category: Optional[str] = None,
+    auto_summarize: Optional[bool] = None,
 ) -> None:
-    if category is not None:
+    if category is not None and auto_summarize is not None:
+        conn.execute(
+            """INSERT INTO article_feeds (name, url, category, auto_summarize) VALUES (?, ?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url, category=excluded.category, auto_summarize=excluded.auto_summarize""",
+            (name, url, category, int(auto_summarize)),
+        )
+    elif category is not None:
         conn.execute(
             """INSERT INTO article_feeds (name, url, category) VALUES (?, ?, ?)
                ON CONFLICT(name) DO UPDATE SET url=excluded.url, category=excluded.category""",
             (name, url, category),
+        )
+    elif auto_summarize is not None:
+        conn.execute(
+            """INSERT INTO article_feeds (name, url, auto_summarize) VALUES (?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET url=excluded.url, auto_summarize=excluded.auto_summarize""",
+            (name, url, int(auto_summarize)),
         )
     else:
         conn.execute(
@@ -875,6 +1008,11 @@ def upsert_article_feed(
 
 def update_article_feed_category(conn: sqlite3.Connection, name: str, category: str) -> None:
     conn.execute("UPDATE article_feeds SET category = ? WHERE name = ?", (category, name))
+    conn.commit()
+
+
+def update_article_feed_auto_summarize(conn: sqlite3.Connection, name: str, auto_summarize: bool) -> None:
+    conn.execute("UPDATE article_feeds SET auto_summarize = ? WHERE name = ?", (int(auto_summarize), name))
     conn.commit()
 
 
@@ -900,7 +1038,7 @@ def get_episodes_by_podcast(conn: sqlite3.Connection, podcast_name: str) -> dict
 def get_podcast_feeds_with_stats(conn: sqlite3.Connection) -> list[dict]:
     """Return podcast feeds with last item date and item count."""
     rows = conn.execute("""
-        SELECT pf.name, pf.url, pf.category,
+        SELECT pf.name, pf.url, pf.category, pf.auto_summarize,
                MAX(e.published_date) as last_item_date,
                COUNT(e.id) as item_count
         FROM podcast_feeds pf
@@ -914,7 +1052,7 @@ def get_podcast_feeds_with_stats(conn: sqlite3.Connection) -> list[dict]:
 def get_article_feeds_with_stats(conn: sqlite3.Connection) -> list[dict]:
     """Return article feeds with last item date and item count."""
     rows = conn.execute("""
-        SELECT af.name, af.url, af.category,
+        SELECT af.name, af.url, af.category, af.auto_summarize,
                MAX(a.published_date) as last_item_date,
                COUNT(a.id) as item_count
         FROM article_feeds af

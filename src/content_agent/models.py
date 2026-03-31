@@ -48,6 +48,7 @@ class ArticleFeed(BaseModel):
     name: str
     url: HttpUrl
     category: Optional[str] = None
+    auto_summarize: bool = False
     last_processed: Optional[datetime] = None
 
 
@@ -259,6 +260,7 @@ class PodcastFeed(BaseModel):
     name: str
     url: HttpUrl
     category: Optional[str] = None
+    auto_summarize: bool = False
     last_processed: Optional[datetime] = None
 
 

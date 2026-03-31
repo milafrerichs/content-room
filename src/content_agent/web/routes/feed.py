@@ -195,6 +195,126 @@ def unarchive_item(request: Request, kind: str, item_id: int):
     return HTMLResponse("")
 
 
+def _render_feed_item(request: Request, kind: str, item_id: int, item: dict) -> Response:
+    """Return the right partial template based on which view made the request."""
+    templates = request.app.state.templates
+    hx_target = request.headers.get("HX-Target", "")
+    if hx_target.startswith("card-"):
+        template = "feed/_mobile_card.html"
+    else:
+        template = "feed/_feed_item.html"
+    return templates.TemplateResponse(template, {"request": request, "item": item})
+
+
+@router.post("/feed/{kind}/{item_id}/read-later", response_class=HTMLResponse)
+def read_later_item(request: Request, kind: str, item_id: int):
+    conn = get_conn(request)
+    try:
+        if kind == "episode":
+            db.mark_episode_read_later(conn, item_id)
+        else:
+            db.mark_article_read_later(conn, item_id)
+        item = db.get_unified_feed_item(conn, kind, item_id)
+    finally:
+        conn.close()
+    if not item:
+        return HTMLResponse("")
+    return _render_feed_item(request, kind, item_id, item)
+
+
+@router.post("/feed/{kind}/{item_id}/unread-later", response_class=HTMLResponse)
+def unread_later_item(request: Request, kind: str, item_id: int):
+    conn = get_conn(request)
+    try:
+        if kind == "episode":
+            db.unmark_episode_read_later(conn, item_id)
+        else:
+            db.unmark_article_read_later(conn, item_id)
+        item = db.get_unified_feed_item(conn, kind, item_id)
+    finally:
+        conn.close()
+    if not item:
+        return HTMLResponse("")
+    return _render_feed_item(request, kind, item_id, item)
+
+
+@router.delete("/feed/{kind}/{item_id}", response_class=HTMLResponse)
+def delete_item(request: Request, kind: str, item_id: int):
+    conn = get_conn(request)
+    try:
+        if kind == "episode":
+            db.delete_episode(conn, item_id)
+        else:
+            db.delete_article(conn, item_id)
+    finally:
+        conn.close()
+    return HTMLResponse("")
+
+
+@router.get("/read-later", response_class=HTMLResponse)
+def read_later_page(
+    request: Request,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    conn = get_conn(request)
+    try:
+        sources = db.get_all_feed_sources(conn)
+        items = db.get_unified_feed(conn, source=source or None, search=search or None, read_later_only=True)
+    finally:
+        conn.close()
+
+    by_day = defaultdict(list)
+    for item in items:
+        day = item["published_date"][:10] if item.get("published_date") else "Unknown"
+        by_day[day].append(item)
+
+    sorted_days = sorted(by_day.keys(), reverse=True)
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/read_later.html",
+        {
+            "request": request,
+            "grouped": by_day,
+            "sorted_days": sorted_days,
+            "sources": sources,
+            "filters": {"source": source, "search": search},
+        },
+    )
+
+
+@router.get("/mobile", response_class=HTMLResponse)
+def mobile_page(
+    request: Request,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+    read_later: Optional[str] = None,
+):
+    conn = get_conn(request)
+    try:
+        sources = db.get_all_feed_sources(conn)
+        items = db.get_unified_feed(
+            conn,
+            source=source or None,
+            search=search or None,
+            read_later_only=read_later == "1",
+        )
+    finally:
+        conn.close()
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/mobile.html",
+        {
+            "request": request,
+            "items": items,
+            "sources": sources,
+            "filters": {"source": source, "search": search, "read_later": read_later},
+        },
+    )
+
+
 @router.get("/feeds", response_class=HTMLResponse)
 def feeds_page(request: Request):
     conn = get_conn(request)
@@ -217,9 +337,9 @@ def sync_all_feeds(request: Request):
     conn = get_conn(request)
     try:
         for pf in config.podcast_feeds:
-            db.upsert_podcast_feed(conn, pf.name, str(pf.url))
+            db.upsert_podcast_feed(conn, pf.name, str(pf.url), auto_summarize=pf.auto_summarize)
         for af in config.article_feeds:
-            db.upsert_article_feed(conn, af.name, str(af.url))
+            db.upsert_article_feed(conn, af.name, str(af.url), auto_summarize=af.auto_summarize)
         conn.commit()
         ctx = _feeds_context(conn)
     finally:
@@ -238,10 +358,11 @@ def create_podcast_feed(
     name: str = Form(...),
     url: str = Form(...),
     category: str = Form(""),
+    auto_summarize: bool = Form(False),
 ):
     conn = get_conn(request)
     try:
-        db.upsert_podcast_feed(conn, name, url, category=category or None)
+        db.upsert_podcast_feed(conn, name, url, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
         ctx = _feeds_context(conn)
     finally:
@@ -260,6 +381,7 @@ def create_article_feed(
     name: str = Form(""),
     url: str = Form(...),
     category: str = Form(""),
+    auto_summarize: bool = Form(False),
 ):
     templates = request.app.state.templates
 
@@ -275,7 +397,7 @@ def create_article_feed(
     feed_name = name.strip() or feed_title or url
     conn = get_conn(request)
     try:
-        db.upsert_article_feed(conn, feed_name, feed_url, category=category or None)
+        db.upsert_article_feed(conn, feed_name, feed_url, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
         ctx = _feeds_context(conn)
     finally:
@@ -297,6 +419,46 @@ def update_podcast_category(
     try:
         db.update_podcast_feed_category(conn, feed_name, category.strip())
         conn.commit()
+        ctx = _feeds_context(conn)
+    finally:
+        conn.close()
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/_feeds_list.html",
+        {"request": request, **ctx},
+    )
+
+
+@router.post("/feeds/podcast/{feed_name}/auto-summarize", response_class=HTMLResponse)
+def toggle_podcast_auto_summarize(
+    request: Request,
+    feed_name: str,
+    auto_summarize: bool = Form(False),
+):
+    conn = get_conn(request)
+    try:
+        db.update_podcast_feed_auto_summarize(conn, feed_name, auto_summarize)
+        ctx = _feeds_context(conn)
+    finally:
+        conn.close()
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/_feeds_list.html",
+        {"request": request, **ctx},
+    )
+
+
+@router.post("/feeds/article/{feed_name}/auto-summarize", response_class=HTMLResponse)
+def toggle_article_auto_summarize(
+    request: Request,
+    feed_name: str,
+    auto_summarize: bool = Form(False),
+):
+    conn = get_conn(request)
+    try:
+        db.update_article_feed_auto_summarize(conn, feed_name, auto_summarize)
         ctx = _feeds_context(conn)
     finally:
         conn.close()

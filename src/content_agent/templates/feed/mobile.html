@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% block title %}Mobile Feed{% endblock %}
+
+{% block head %}
+<style>
+  /* Hide sidebar on mobile for this page */
+  @media (max-width: 767px) {
+    #sidebar { display: none !important; }
+  }
+
+  /* Only show the first card */
+  #mobile-feed .mobile-card { display: none; }
+  #mobile-feed .mobile-card:first-child { display: block; }
+
+  .mobile-card {
+    touch-action: pan-y;
+  }
+
+  .mobile-card .card-content {
+    transition: transform 0.2s ease;
+  }
+
+  .mobile-card.swiping .card-content {
+    transition: none;
+  }
+
+  .mobile-card.dismissing {
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+  }
+
+  .mobile-card.dismissing.dismiss-left {
+    transform: translateX(-120%);
+  }
+
+  .mobile-card.dismissing.dismiss-right {
+    transform: translateX(120%);
+  }
+
+  .action-menu-open .action-reveal {
+    pointer-events: auto !important;
+    opacity: 1 !important;
+  }
+
+  /* Counter styling */
+  .item-counter {
+    transition: opacity 0.2s ease;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-4 md:p-8 fade-in max-w-lg mx-auto flex flex-col" style="min-height: calc(100vh - 2rem);">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <div class="mono text-xs text-accent tracking-widest mb-1">FEED</div>
+      <h1 class="text-xl font-semibold text-slate-800">Latest Items</h1>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="item-counter" class="item-counter mono text-xs text-slate-400">
+        {% if items %}1 / {{ items|length }}{% endif %}
+      </span>
+      <a href="/feed" class="text-xs text-slate-400 hover:text-accent mono transition-colors">Desktop</a>
+    </div>
+  </div>
+
+  <!-- Tabs: All / Read Later -->
+  <div class="flex gap-2 mb-4">
+    <a href="/mobile{% if filters.source %}?source={{ filters.source }}{% endif %}"
+       class="px-4 py-2 text-xs font-medium rounded-lg mono transition-colors
+              {% if not filters.read_later %}bg-accent text-white{% else %}bg-white text-slate-500 border border-surface-200 hover:border-accent hover:text-accent{% endif %}">
+      All
+    </a>
+    <a href="/mobile?read_later=1{% if filters.source %}&source={{ filters.source }}{% endif %}"
+       class="px-4 py-2 text-xs font-medium rounded-lg mono transition-colors
+              {% if filters.read_later %}bg-amber-500 text-white{% else %}bg-white text-slate-500 border border-surface-200 hover:border-amber-400 hover:text-amber-600{% endif %}">
+      <span class="inline-flex items-center gap-1">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+        </svg>
+        Read Later
+      </span>
+    </a>
+  </div>
+
+  <!-- Filters (collapsed by default on mobile) -->
+  <details class="mb-4">
+    <summary class="text-xs text-slate-400 mono cursor-pointer hover:text-slate-600">Filters</summary>
+    <div class="flex gap-2 mt-2">
+      <select name="source"
+              hx-get="/mobile"
+              hx-target="body"
+              hx-push-url="true"
+              hx-include="[name='search'], [name='read_later']"
+              class="form-input flex-1 rounded-lg px-3 py-2 text-sm">
+        <option value="">All sources</option>
+        {% for s in sources %}
+        <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <div class="relative flex-1">
+        <input type="text" name="search"
+               value="{{ filters.search or '' }}"
+               placeholder="Search..."
+               class="form-input w-full rounded-lg pl-8 pr-3 py-2 text-sm"
+               hx-get="/mobile"
+               hx-target="body"
+               hx-push-url="true"
+               hx-trigger="keyup delay:300ms, change"
+               hx-include="[name='source'], [name='read_later']" />
+        <svg class="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+      {% if filters.read_later %}
+      <input type="hidden" name="read_later" value="1" />
+      {% endif %}
+    </div>
+  </details>
+
+  <!-- Single card area -->
+  {% if items %}
+  <div id="mobile-feed" class="flex-1 flex flex-col" data-total="{{ items|length }}">
+    {% for item in items %}
+    {% include "feed/_mobile_card.html" %}
+    {% endfor %}
+  </div>
+
+  <!-- Empty state (shown when all cards are processed) -->
+  <div id="mobile-empty" class="flex-1 flex-col items-center justify-center hidden">
+    <div class="bg-white border border-surface-200 rounded-xl p-12 text-center">
+      <div class="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <p class="text-slate-500 font-medium">All caught up!</p>
+      <p class="text-slate-400 text-sm mt-1">You've gone through all items.</p>
+      <a href="/mobile" class="inline-block mt-4 px-4 py-2 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent-text transition-colors mono">
+        Refresh
+      </a>
+    </div>
+  </div>
+  {% else %}
+  <div class="flex-1 flex flex-col items-center justify-center">
+    <div class="bg-white border border-surface-200 rounded-xl p-12 text-center">
+      <div class="w-12 h-12 rounded-full bg-surface-100 flex items-center justify-center mx-auto mb-4">
+        <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>
+        </svg>
+      </div>
+      {% if filters.read_later %}
+      <p class="text-slate-500 font-medium">No saved items</p>
+      <p class="text-slate-400 text-sm mt-1">Items you save for later will appear here.</p>
+      {% else %}
+      <p class="text-slate-500 font-medium">No items found</p>
+      <p class="text-slate-400 text-sm mt-1">Feed items will appear here once discovered.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+(function() {
+  var THRESHOLD = 60;
+  var MAX_SLIDE = 120;
+  var startX, startY, currentCard, cardContent, deltaX, isHorizontal;
+  var processedCount = 0;
+
+  function getContainer() {
+    return document.getElementById('mobile-feed');
+  }
+
+  function getTotalCount() {
+    var container = getContainer();
+    return container ? parseInt(container.dataset.total, 10) : 0;
+  }
+
+  function updateCounter() {
+    var counter = document.getElementById('item-counter');
+    if (!counter) return;
+    var container = getContainer();
+    if (!container) return;
+    var remaining = container.querySelectorAll('.mobile-card').length;
+    if (remaining === 0) {
+      counter.textContent = '';
+    } else {
+      var total = getTotalCount();
+      counter.textContent = (total - remaining + 1) + ' / ' + total;
+    }
+  }
+
+  function showEmptyIfDone() {
+    var container = getContainer();
+    if (!container) return;
+    var remaining = container.querySelectorAll('.mobile-card').length;
+    if (remaining === 0) {
+      var emptyEl = document.getElementById('mobile-empty');
+      if (emptyEl) {
+        emptyEl.classList.remove('hidden');
+        emptyEl.classList.add('flex');
+      }
+      container.style.display = 'none';
+    }
+  }
+
+  function dismissCard(card, direction, callback) {
+    card.classList.add('dismissing', direction === 'left' ? 'dismiss-left' : 'dismiss-right');
+    setTimeout(function() {
+      card.remove();
+      updateCounter();
+      showEmptyIfDone();
+      if (callback) callback();
+    }, 300);
+  }
+
+  function onTouchStart(e) {
+    var openCard = document.querySelector('.action-menu-open');
+    if (openCard && !openCard.contains(e.target)) {
+      closeActionMenu(openCard);
+    }
+
+    var card = e.target.closest('.mobile-card');
+    if (!card) return;
+    currentCard = card;
+    cardContent = card.querySelector('.card-content');
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    deltaX = 0;
+    isHorizontal = null;
+    card.classList.add('swiping');
+  }
+
+  function onTouchMove(e) {
+    if (!currentCard) return;
+    var dx = e.touches[0].clientX - startX;
+    var dy = e.touches[0].clientY - startY;
+
+    if (isHorizontal === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      isHorizontal = Math.abs(dx) > Math.abs(dy);
+    }
+    if (!isHorizontal) return;
+
+    e.preventDefault();
+    deltaX = Math.max(-MAX_SLIDE, Math.min(MAX_SLIDE, dx));
+    cardContent.style.transform = 'translateX(' + deltaX + 'px)';
+
+    var leftReveal = currentCard.querySelector('.read-later-reveal');
+    var rightReveal = currentCard.querySelector('.action-reveal');
+    leftReveal.style.opacity = deltaX < -20 ? Math.min(1, (-deltaX - 20) / 40) : 0;
+    rightReveal.style.opacity = deltaX > 20 ? Math.min(1, (deltaX - 20) / 40) : 0;
+  }
+
+  function onTouchEnd() {
+    if (!currentCard || !isHorizontal) {
+      if (currentCard) currentCard.classList.remove('swiping');
+      currentCard = null;
+      return;
+    }
+
+    currentCard.classList.remove('swiping');
+
+    if (deltaX < -THRESHOLD) {
+      // Swipe left -> Read Later and advance
+      var card = currentCard;
+      var kind = card.dataset.kind;
+      var id = card.dataset.id;
+      // Fire the read-later request silently (we don't need the response to render)
+      fetch('/feed/' + kind + '/' + id + '/read-later', {method: 'POST'});
+      dismissCard(card, 'left');
+    } else if (deltaX > THRESHOLD) {
+      // Swipe right -> show action menu
+      cardContent.style.transform = 'translateX(' + MAX_SLIDE + 'px)';
+      currentCard.classList.add('action-menu-open');
+      currentCard = null;
+      return;
+    } else {
+      snapBack();
+    }
+    currentCard = null;
+  }
+
+  function snapBack() {
+    if (!currentCard) return;
+    cardContent.style.transform = '';
+    currentCard.querySelector('.read-later-reveal').style.opacity = 0;
+    currentCard.querySelector('.action-reveal').style.opacity = 0;
+  }
+
+  function closeActionMenu(card) {
+    card.classList.remove('action-menu-open');
+    var content = card.querySelector('.card-content');
+    content.style.transform = '';
+    card.querySelector('.action-reveal').style.opacity = 0;
+  }
+
+  // Event delegation for touch
+  document.addEventListener('touchstart', function(e) {
+    var container = getContainer();
+    if (container && container.contains(e.target)) onTouchStart(e);
+  }, {passive: true});
+
+  document.addEventListener('touchmove', function(e) {
+    var container = getContainer();
+    if (container && container.contains(e.target)) onTouchMove(e);
+  }, {passive: false});
+
+  document.addEventListener('touchend', function(e) {
+    onTouchEnd();
+  });
+
+  // Close action menu on click outside
+  document.addEventListener('click', function(e) {
+    var openCard = document.querySelector('.action-menu-open');
+    if (openCard && !openCard.contains(e.target)) {
+      closeActionMenu(openCard);
+    }
+  });
+
+  // Handle button clicks for all card actions
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var card = btn.closest('.mobile-card');
+    if (!card) return;
+
+    var action = btn.dataset.action;
+    var direction = btn.dataset.dismiss || 'right';
+    var kind = card.dataset.kind;
+    var id = card.dataset.id;
+
+    if (action === 'delete') {
+      if (!confirm('Delete this item?')) return;
+      fetch('/feed/' + kind + '/' + id, {method: 'DELETE'});
+      dismissCard(card, direction);
+    } else if (action === 'archive') {
+      fetch('/feed/' + kind + '/' + id + '/archive', {method: 'POST'});
+      dismissCard(card, direction);
+    } else if (action === 'read-later') {
+      fetch('/feed/' + kind + '/' + id + '/read-later', {method: 'POST'});
+      dismissCard(card, 'left');
+    }
+  });
+})();
+</script>
+{% endblock %}

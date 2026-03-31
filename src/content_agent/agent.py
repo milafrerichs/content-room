@@ -615,9 +615,9 @@ class ContentAgent(BaseModel):
 
         # Sync feeds from config into DB so new config entries are picked up
         for pf in self.config.podcast_feeds:
-            db.upsert_podcast_feed(conn, pf.name, str(pf.url))
+            db.upsert_podcast_feed(conn, pf.name, str(pf.url), auto_summarize=pf.auto_summarize)
         for af in self.config.article_feeds:
-            db.upsert_article_feed(conn, af.name, str(af.url))
+            db.upsert_article_feed(conn, af.name, str(af.url), auto_summarize=af.auto_summarize)
         conn.commit()
 
         run_id = db.start_run(conn)
@@ -672,11 +672,14 @@ class ContentAgent(BaseModel):
                 )
                 articles_discovered += 1
 
-        # Generate one-sentence summaries for newly discovered items
+        # Generate one-sentence summaries only for feeds with auto_summarize enabled
         one_sentence_tasks = []
 
         articles_needing = conn.execute(
-            "SELECT id, content FROM articles WHERE one_sentence_summary IS NULL AND content IS NOT NULL"
+            "SELECT a.id, a.content FROM articles a "
+            "JOIN article_feeds af ON a.feed_name = af.name "
+            "WHERE a.one_sentence_summary IS NULL AND a.content IS NOT NULL "
+            "AND af.auto_summarize = 1"
         ).fetchall()
         for row in articles_needing:
             one_sentence_tasks.append(
@@ -684,8 +687,10 @@ class ContentAgent(BaseModel):
             )
 
         episodes_needing = conn.execute(
-            "SELECT id, description FROM episodes "
-            "WHERE one_sentence_summary IS NULL AND description IS NOT NULL AND description != ''"
+            "SELECT e.id, e.description FROM episodes e "
+            "JOIN podcast_feeds pf ON e.podcast_name = pf.name "
+            "WHERE e.one_sentence_summary IS NULL AND e.description IS NOT NULL "
+            "AND e.description != '' AND pf.auto_summarize = 1"
         ).fetchall()
         for row in episodes_needing:
             one_sentence_tasks.append(

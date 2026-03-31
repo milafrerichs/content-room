@@ -56,6 +56,33 @@
     <div class="w-2 h-2 rounded-full bg-surface-200 border border-surface-300" title="Unread"></div>
     {% endif %}
 
+    <!-- Read Later -->
+    {% if item.read_later_at %}
+    <button
+      hx-post="/feed/{{ item.kind }}/{{ item.id }}/unread-later"
+      hx-target="#feed-item-{{ item.kind }}-{{ item.id }}"
+      hx-swap="outerHTML"
+      class="p-1 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+      title="Remove from Read Later"
+    >
+      <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+      </svg>
+    </button>
+    {% else %}
+    <button
+      hx-post="/feed/{{ item.kind }}/{{ item.id }}/read-later"
+      hx-target="#feed-item-{{ item.kind }}-{{ item.id }}"
+      hx-swap="outerHTML"
+      class="p-1 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded transition-colors"
+      title="Read Later"
+    >
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+      </svg>
+    </button>
+    {% endif %}
+
     <!-- Archive / Unarchive -->
     {% if item.archived_at %}
     <button
