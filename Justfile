@@ -1,5 +1,7 @@
 default_port := "7004"
 
+default: serve
+
 serve port=default_port:
 	uv run news-cli serve --host 0.0.0.0 --port {{port}}
 

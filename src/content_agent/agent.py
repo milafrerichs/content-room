@@ -701,86 +701,42 @@ class ContentAgent(BaseModel):
             logger.info(f"Generating one-sentence summaries for {len(one_sentence_tasks)} items")
             await asyncio.gather(*one_sentence_tasks, return_exceptions=True)
 
-        # Process pending episodes (download + transcribe only; summarization is on-demand)
-        pending_episodes = db.get_pending_episodes(conn)
-        episode_tasks = []
-        for row in pending_episodes:
-            episode = PodcastEpisode(
-                title=row["title"],
-                description=row["description"],
-                audio_url=row["audio_url"],
-                published_date=datetime.fromisoformat(row["published_date"]),
-                duration=row["duration"],
-                podcast_name=row["podcast_name"],
-                local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
-                transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
-            )
-            episode_tasks.append(self.process_episode(episode, self.config.db_path, row["id"]))
-
-        # Close the main connection before concurrent processing (each task opens its own)
-        conn_db_path = self.config.db_path
-
-        # Run episode processing concurrently
-        all_episode_results = await asyncio.gather(*episode_tasks, return_exceptions=True)
-
-        # Tally results
-        episode_results = []
-        for r in all_episode_results:
-            if isinstance(r, Exception):
-                logger.error(f"Episode processing failed: {r}")
-                episode_results.append(ProcessingResult(
-                    episode=PodcastEpisode(
-                        title="unknown", audio_url="http://unknown", published_date=datetime.now(), podcast_name="unknown"
-                    ),
-                    success=False, error_message=str(r), processing_time=0,
-                ))
-            else:
-                episode_results.append(r)
-
-        episodes_successful = sum(1 for r in episode_results if r.success)
-        episodes_failed = len(episode_results) - episodes_successful
-        total_time = sum(r.processing_time for r in episode_results)
-
-        # Finish run record
-        finish_conn = db.init_db(conn_db_path)
+        # Finish run record (discovery only — transcription/summarization are on-demand via API)
         db.finish_run(
-            finish_conn,
+            conn,
             run_id,
             episodes_discovered,
-            episodes_successful,
-            episodes_failed,
+            0,  # episodes_processed
+            0,  # episodes_failed
             articles_discovered,
-            0,  # articles_processed (summarization is on-demand)
+            0,  # articles_processed
             0,  # articles_failed
         )
-        finish_conn.close()
         conn.close()
 
         logger.info(
-            f"Processing complete: {episodes_successful} episodes transcribed, "
-            f"{episodes_failed} failed; {articles_discovered} articles discovered"
+            f"Discovery complete: {episodes_discovered} episodes, "
+            f"{articles_discovered} articles discovered"
         )
 
         if self.config.notifications_enabled:
             self.send_notification(
-                "Content Processing Complete",
-                f"{episodes_successful} episodes transcribed, {articles_discovered} articles discovered",
-                f"Failed: {episodes_failed} episodes",
+                "Content Discovery Complete",
+                f"{episodes_discovered} episodes, {articles_discovered} articles discovered",
+                "",
             )
 
         if self.config.speak_results:
-            speech_text = f"Content processing complete. {episodes_successful} episodes transcribed. {articles_discovered} articles discovered."
-            if episodes_failed > 0:
-                speech_text += f" {episodes_failed} episodes failed."
-            self.speak_text(speech_text)
+            self.speak_text(
+                f"Content discovery complete. {episodes_discovered} episodes "
+                f"and {articles_discovered} articles discovered."
+            )
 
         if self.config.show_completion_alert:
             self.show_alert(
-                f"Processing complete!\n\n"
-                f"{episodes_successful} episodes transcribed\n"
-                f"{articles_discovered} articles discovered\n"
-                f"Failed: {episodes_failed} episodes\n"
-                f"Total time: {total_time:.1f}s"
+                f"Discovery complete!\n\n"
+                f"{episodes_discovered} episodes discovered\n"
+                f"{articles_discovered} articles discovered"
             )
 
-        return episode_results
+        return []

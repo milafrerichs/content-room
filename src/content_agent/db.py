@@ -595,6 +595,55 @@ def delete_article(conn: sqlite3.Connection, article_id: int) -> bool:
     return cursor.rowcount > 0
 
 
+def set_episode_transcript(conn: sqlite3.Connection, episode_id: int, transcript_path: str) -> bool:
+    cursor = conn.execute(
+        "UPDATE episodes SET transcript_path = ?, status = 'transcribed', processed_at = datetime('now') WHERE id = ?",
+        (transcript_path, episode_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def set_episode_summary(
+    conn: sqlite3.Connection,
+    episode_id: int,
+    summary_path: str,
+    one_sentence_summary: Optional[str] = None,
+) -> bool:
+    if one_sentence_summary:
+        cursor = conn.execute(
+            "UPDATE episodes SET summary_path = ?, one_sentence_summary = ?, status = 'summarized', processed_at = datetime('now') WHERE id = ?",
+            (summary_path, one_sentence_summary, episode_id),
+        )
+    else:
+        cursor = conn.execute(
+            "UPDATE episodes SET summary_path = ?, status = 'summarized', processed_at = datetime('now') WHERE id = ?",
+            (summary_path, episode_id),
+        )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def set_article_summary(
+    conn: sqlite3.Connection,
+    article_id: int,
+    summary_path: str,
+    one_sentence_summary: Optional[str] = None,
+) -> bool:
+    if one_sentence_summary:
+        cursor = conn.execute(
+            "UPDATE articles SET summary_path = ?, one_sentence_summary = ?, status = 'summarized', processed_at = datetime('now') WHERE id = ?",
+            (summary_path, one_sentence_summary, article_id),
+        )
+    else:
+        cursor = conn.execute(
+            "UPDATE articles SET summary_path = ?, status = 'summarized', processed_at = datetime('now') WHERE id = ?",
+            (summary_path, article_id),
+        )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
 def get_feed_stats(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Get article feed names with unread/total article counts."""
     return conn.execute(

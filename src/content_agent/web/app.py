@@ -10,7 +10,7 @@ from content_agent.models import AgentConfig
 
 def create_app(config: AgentConfig) -> FastAPI:
     # Import routes here to avoid circular imports at module level
-    from content_agent.web.routes import articles, dashboard, episodes, feed, podcasts, runs, settings
+    from content_agent.web.routes import api, articles, dashboard, episodes, feed, podcasts, runs, settings
 
     app = FastAPI(title="Podcast Agent Dashboard")
 
@@ -27,6 +27,7 @@ def create_app(config: AgentConfig) -> FastAPI:
     app.state.config = config
     app.state.templates = templates
 
+    app.include_router(api.router)
     app.include_router(dashboard.router)
     app.include_router(feed.router)
     app.include_router(episodes.router)
