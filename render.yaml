@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: content-agent
+    runtime: python
+    buildCommand: pip install -e .
+    startCommand: gunicorn asgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 2
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CONFIG_PATH
+        value: config.yaml
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
