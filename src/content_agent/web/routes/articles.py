@@ -3,20 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
-from content_agent import db
-from content_agent.db import (
-    archive_article,
-    get_all_articles,
-    get_article_by_id,
-    get_article_count,
-    get_article_feeds,
-    get_distinct_feed_names,
-    mark_article_read,
-    reset_article_for_rerun,
-    unarchive_article,
-    upsert_article_feed,
-    delete_article_feed,
-)
+from content_agent.queries import articles, feeds
 from content_agent.web.deps import get_conn
 from content_agent.web.processing import run_rerun_article
 
@@ -34,9 +21,9 @@ PAGE_SIZE = 24
 def articles_page(request: Request):
     conn = get_conn(request)
     try:
-        feed_names = get_distinct_feed_names(conn)
-        articles = get_all_articles(conn, limit=PAGE_SIZE, offset=0)
-        total = get_article_count(conn)
+        feed_names = articles.get_feed_names(conn)
+        article_list = articles.get_all(conn, limit=PAGE_SIZE, offset=0)
+        total = articles.get_count(conn)
     finally:
         conn.close()
 
@@ -45,7 +32,7 @@ def articles_page(request: Request):
         "articles/list.html",
         {
             "request": request,
-            "articles": articles,
+            "articles": article_list,
             "feed_names": feed_names,
             "total": total,
             "page": 1,
@@ -68,7 +55,7 @@ def articles_search(
     offset = (page - 1) * PAGE_SIZE
     conn = get_conn(request)
     try:
-        articles = get_all_articles(
+        article_list = articles.get_all(
             conn,
             feed_name=feed_name or None,
             status=status or None,
@@ -78,7 +65,7 @@ def articles_search(
             limit=PAGE_SIZE,
             offset=offset,
         )
-        total = get_article_count(
+        total = articles.get_count(
             conn,
             feed_name=feed_name or None,
             status=status or None,
@@ -102,7 +89,7 @@ def articles_search(
         "articles/_article_table.html",
         {
             "request": request,
-            "articles": articles,
+            "articles": article_list,
             "total": total,
             "page": page,
             "page_size": PAGE_SIZE,
@@ -115,7 +102,7 @@ def articles_search(
 def article_detail(request: Request, article_id: int):
     conn = get_conn(request)
     try:
-        article = get_article_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id)
     finally:
         conn.close()
 
@@ -148,7 +135,7 @@ def article_detail(request: Request, article_id: int):
 def mark_read(request: Request, article_id: int):
     conn = get_conn(request)
     try:
-        mark_article_read(conn, article_id)
+        articles.mark_read(conn, article_id)
     finally:
         conn.close()
     return Response(
@@ -161,10 +148,10 @@ def mark_read(request: Request, article_id: int):
 def article_summarize(request: Request, article_id: int, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        article = get_article_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
-        reset_article_for_rerun(conn, article_id)
+        articles.reset_for_rerun(conn, article_id)
         article_dict = dict(article)
         article_dict["status"] = "discovered"
     finally:
@@ -183,7 +170,7 @@ def article_summarize(request: Request, article_id: int, background_tasks: Backg
 def article_actions(request: Request, article_id: int):
     conn = get_conn(request)
     try:
-        article = get_article_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
         article_dict = dict(article)
@@ -201,7 +188,7 @@ def article_actions(request: Request, article_id: int):
 def archive(request: Request, article_id: int):
     conn = get_conn(request)
     try:
-        archive_article(conn, article_id)
+        articles.archive(conn, article_id)
     finally:
         conn.close()
     return Response(
@@ -214,7 +201,7 @@ def archive(request: Request, article_id: int):
 def unarchive(request: Request, article_id: int):
     conn = get_conn(request)
     try:
-        unarchive_article(conn, article_id)
+        articles.unarchive(conn, article_id)
     finally:
         conn.close()
     return Response(
@@ -233,12 +220,12 @@ def feeds_page(request: Request):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feeds = get_article_feeds(conn)
+        feed_list = feeds.get_articles(conn)
     finally:
         conn.close()
     return templates.TemplateResponse(
         "articles/feeds.html",
-        {"request": request, "feeds": feeds},
+        {"request": request, "feeds": feed_list},
     )
 
 
@@ -247,14 +234,14 @@ async def create_article_feed(request: Request, name: str = Form(...), url: str 
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        upsert_article_feed(conn, name, url)
+        feeds.upsert_article(conn, name, url)
         conn.commit()
-        feeds = get_article_feeds(conn)
+        feed_list = feeds.get_articles(conn)
     finally:
         conn.close()
     return templates.TemplateResponse(
         "articles/_feeds_list.html",
-        {"request": request, "feeds": feeds},
+        {"request": request, "feeds": feed_list},
     )
 
 
@@ -265,16 +252,16 @@ def sync_article_feeds(request: Request):
     conn = get_conn(request)
     try:
         for af in config.article_feeds:
-            upsert_article_feed(conn, af.name, str(af.url))
+            feeds.upsert_article(conn, af.name, str(af.url))
         conn.commit()
-        feeds = get_article_feeds(conn)
+        feed_list = feeds.get_articles(conn)
     finally:
         conn.close()
 
     templates = request.app.state.templates
     return templates.TemplateResponse(
         "articles/_feeds_list.html",
-        {"request": request, "feeds": feeds},
+        {"request": request, "feeds": feed_list},
     )
 
 
@@ -282,7 +269,7 @@ def sync_article_feeds(request: Request):
 def delete_feed(request: Request, feed_name: str):
     conn = get_conn(request)
     try:
-        delete_article_feed(conn, feed_name)
+        feeds.delete_article(conn, feed_name)
         conn.commit()
     finally:
         conn.close()

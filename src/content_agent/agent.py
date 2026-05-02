@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import sqlite3
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,6 +15,7 @@ from pydantic import BaseModel, PrivateAttr
 from .models import AgentConfig, Article, ArticleFeed, PodcastEpisode, PodcastFeed, ProcessingResult
 from .summarizer import extract_sponsors, summarize_micro, summarize_one_sentence, summarize_transcript
 from . import db
+from .queries import articles, episodes, feeds, runs
 
 
 def clean_html(text: str) -> str:
@@ -143,7 +143,7 @@ class ContentAgent(BaseModel):
                     content = await response.text()
 
             parsed_feed = feedparser.parse(content)
-            episodes = []
+            episode_list = []
 
             today = datetime.now().date()
             yesterday = today - timedelta(days=1)
@@ -169,9 +169,9 @@ class ContentAgent(BaseModel):
                         duration=entry.get("itunes_duration"),
                         podcast_name=feed.name,
                     )
-                    episodes.append(episode)
+                    episode_list.append(episode)
 
-            return episodes
+            return episode_list
 
         except Exception as e:
             logger.error(f"Error fetching RSS feed {feed.name}: {str(e)}")
@@ -269,12 +269,12 @@ class ContentAgent(BaseModel):
                     content,
                     **self.config.get_task_model_kwargs("one_sentence"),
                 )
-            s_conn = db.init_db(self.config.db_path)
+            s_conn = db.init_db(self.config.database_url)
             try:
                 if table == "articles":
-                    db.update_article_one_sentence(s_conn, item_id, summary)
+                    articles.update_one_sentence(s_conn, item_id, summary)
                 else:
-                    db.update_episode_one_sentence(s_conn, item_id, summary)
+                    episodes.update_one_sentence(s_conn, item_id, summary)
             finally:
                 s_conn.close()
         except Exception as e:
@@ -348,41 +348,41 @@ class ContentAgent(BaseModel):
             return False
 
     async def process_episode(
-        self, episode: PodcastEpisode, db_path: Path, episode_id: int
+        self, episode: PodcastEpisode, database_url: str, episode_id: int
     ) -> ProcessingResult:
         """Process a single episode: download, transcribe, summarize"""
         start_time = time.time()
-        conn = db.init_db(db_path)
+        conn = db.init_db(database_url)
 
         try:
             # Download
-            db.update_episode_status(conn, episode_id, "downloading")
+            episodes.update_status(conn, episode_id, "downloading")
             async with self._download_semaphore:
                 if not await self.download_episode(episode):
-                    db.update_episode_status(conn, episode_id, "failed", error_message="Failed to download")
+                    episodes.update_status(conn, episode_id, "failed", error_message="Failed to download")
                     return ProcessingResult(
                         episode=episode,
                         success=False,
                         error_message="Failed to download episode",
                         processing_time=time.time() - start_time,
                     )
-            db.update_episode_status(
+            episodes.update_status(
                 conn, episode_id, "downloaded",
                 local_audio_path=str(episode.local_audio_path),
             )
 
             # Transcribe
-            db.update_episode_status(conn, episode_id, "transcribing")
+            episodes.update_status(conn, episode_id, "transcribing")
             async with self._whisper_semaphore:
                 if not await self.transcribe_episode_async(episode):
-                    db.update_episode_status(conn, episode_id, "failed", error_message="Failed to transcribe")
+                    episodes.update_status(conn, episode_id, "failed", error_message="Failed to transcribe")
                     return ProcessingResult(
                         episode=episode,
                         success=False,
                         error_message="Failed to transcribe episode",
                         processing_time=time.time() - start_time,
                     )
-            db.update_episode_status(
+            episodes.update_status(
                 conn, episode_id, "transcribed",
                 transcript_path=str(episode.transcript_path),
             )
@@ -392,7 +392,7 @@ class ContentAgent(BaseModel):
             )
 
         except Exception as e:
-            db.update_episode_status(conn, episode_id, "failed", error_message=str(e))
+            episodes.update_status(conn, episode_id, "failed", error_message=str(e))
             return ProcessingResult(
                 episode=episode,
                 success=False,
@@ -412,7 +412,7 @@ class ContentAgent(BaseModel):
                     content = await response.text()
 
             parsed_feed = feedparser.parse(content)
-            episodes = []
+            episode_list = []
 
             for entry in parsed_feed.entries[:count]:
                 pub_date = datetime.fromtimestamp(time.mktime(entry.published_parsed))
@@ -432,9 +432,9 @@ class ContentAgent(BaseModel):
                         duration=entry.get("itunes_duration"),
                         podcast_name=feed.name,
                     )
-                    episodes.append(episode)
+                    episode_list.append(episode)
 
-            return episodes
+            return episode_list
 
         except Exception as e:
             logger.error(f"Error fetching RSS feed {feed.name}: {str(e)}")
@@ -442,8 +442,8 @@ class ContentAgent(BaseModel):
 
     async def download_podcast(self, podcast_name: str, count: int) -> List[ProcessingResult]:
         """Download and process N recent episodes from a named podcast, bypassing date filter."""
-        conn = db.init_db(self.config.db_path)
-        podcast_feeds = db.get_podcast_feeds(conn)
+        conn = db.init_db(self.config.database_url)
+        podcast_feeds = feeds.get_podcasts(conn)
         feed = next(
             (f for f in podcast_feeds if f.name.lower() == podcast_name.lower()),
             None,
@@ -453,14 +453,14 @@ class ContentAgent(BaseModel):
             available = ", ".join(f.name for f in podcast_feeds)
             raise ValueError(f"Podcast '{podcast_name}' not found. Available: {available}")
 
-        episodes = await self.fetch_podcast_episodes(feed, count)
-        if not episodes:
+        episode_list = await self.fetch_podcast_episodes(feed, count)
+        if not episode_list:
             logger.info(f"No episodes found for {podcast_name}")
             conn.close()
             return []
 
-        for ep in episodes:
-            db.insert_episode(
+        for ep in episode_list:
+            episodes.insert(
                 conn,
                 podcast_name=ep.podcast_name,
                 title=ep.title,
@@ -470,7 +470,7 @@ class ContentAgent(BaseModel):
                 description=ep.description,
             )
 
-        pending = db.get_pending_episodes(conn)
+        pending = episodes.get_pending(conn)
         episode_map = {row["audio_url"]: row for row in pending}
 
         # Generate one-sentence summaries for newly inserted episodes
@@ -486,11 +486,11 @@ class ContentAgent(BaseModel):
             await asyncio.gather(*summary_tasks, return_exceptions=True)
 
         tasks = []
-        for ep in episodes:
+        for ep in episode_list:
             row = episode_map.get(str(ep.audio_url))
             if row is None:
                 continue
-            tasks.append(self.process_episode(ep, self.config.db_path, row["id"]))
+            tasks.append(self.process_episode(ep, self.config.database_url, row["id"]))
 
         gather_results = await asyncio.gather(*tasks, return_exceptions=True)
         results = []
@@ -511,7 +511,7 @@ class ContentAgent(BaseModel):
                     content = await response.text()
 
             parsed_feed = feedparser.parse(content)
-            articles = []
+            article_list = []
 
             today = datetime.now().date()
             yesterday = today - timedelta(days=1)
@@ -556,22 +556,22 @@ class ContentAgent(BaseModel):
                     description=clean_html(getattr(entry, 'summary', '') or ''),
                     feed_name=feed.name,
                 )
-                articles.append(article)
+                article_list.append(article)
 
-            return articles
+            return article_list
 
         except Exception as e:
             logger.error(f"Error fetching article feed {feed.name}: {str(e)}")
             return []
 
     async def process_article(
-        self, article: Article, db_path: Path, article_id: int
+        self, article: Article, database_url: str, article_id: int
     ) -> bool:
         """Process a single article: summarize and save"""
-        conn = db.init_db(db_path)
+        conn = db.init_db(database_url)
         try:
             logger.info(f"Summarizing article: {article.title}")
-            db.update_article_status(conn, article_id, "summarizing")
+            articles.update_status(conn, article_id, "summarizing")
 
             # Summarize using micro summary pattern (appropriate for articles)
             async with self._llm_semaphore:
@@ -594,7 +594,7 @@ class ContentAgent(BaseModel):
             with open(summary_path, "w", encoding="utf-8") as f:
                 f.write(markdown)
 
-            db.update_article_status(
+            articles.update_status(
                 conn, article_id, "summarized", summary_path=str(summary_path)
             )
             logger.info(f"Summarized: {summary_filename}")
@@ -602,7 +602,7 @@ class ContentAgent(BaseModel):
 
         except Exception as e:
             logger.error(f"Error processing article {article.title}: {str(e)}")
-            db.update_article_status(conn, article_id, "failed", error_message=str(e))
+            articles.update_status(conn, article_id, "failed", error_message=str(e))
             return False
         finally:
             conn.close()
@@ -611,22 +611,22 @@ class ContentAgent(BaseModel):
         """Main method to process all feeds (podcasts and articles)"""
         logger.info("Starting content processing")
 
-        conn = db.init_db(self.config.db_path)
+        conn = db.init_db(self.config.database_url)
 
         # Sync feeds from config into DB so new config entries are picked up
         for pf in self.config.podcast_feeds:
-            db.upsert_podcast_feed(conn, pf.name, str(pf.url), auto_summarize=pf.auto_summarize)
+            feeds.upsert_podcast(conn, pf.name, str(pf.url), auto_summarize=pf.auto_summarize)
         for af in self.config.article_feeds:
-            db.upsert_article_feed(conn, af.name, str(af.url), auto_summarize=af.auto_summarize)
+            feeds.upsert_article(conn, af.name, str(af.url), auto_summarize=af.auto_summarize)
         conn.commit()
 
-        run_id = db.start_run(conn)
+        run_id = runs.start(conn)
         episodes_discovered = 0
         articles_discovered = 0
 
         # Fetch feeds from DB (includes both config and web-UI-added feeds)
-        podcast_feeds = db.get_podcast_feeds(conn)
-        article_feeds = db.get_article_feeds(conn)
+        podcast_feeds = feeds.get_podcasts(conn)
+        article_feeds = feeds.get_articles(conn)
 
         podcast_results = await asyncio.gather(
             *[self.fetch_rss_feed(f) for f in podcast_feeds],
@@ -643,7 +643,7 @@ class ContentAgent(BaseModel):
                 logger.error(f"Feed fetch failed: {result}")
                 continue
             for ep in result:
-                db.insert_episode(
+                episodes.insert(
                     conn,
                     podcast_name=ep.podcast_name,
                     title=ep.title,
@@ -660,7 +660,7 @@ class ContentAgent(BaseModel):
                 logger.error(f"Article feed fetch failed: {result}")
                 continue
             for art in result:
-                db.insert_article(
+                articles.insert(
                     conn,
                     feed_name=art.feed_name,
                     title=art.title,
@@ -675,24 +675,12 @@ class ContentAgent(BaseModel):
         # Generate one-sentence summaries only for feeds with auto_summarize enabled
         one_sentence_tasks = []
 
-        articles_needing = conn.execute(
-            "SELECT a.id, a.content FROM articles a "
-            "JOIN article_feeds af ON a.feed_name = af.name "
-            "WHERE a.one_sentence_summary IS NULL AND a.content IS NOT NULL "
-            "AND af.auto_summarize = 1"
-        ).fetchall()
-        for row in articles_needing:
+        for row in articles.get_needing_one_sentence(conn):
             one_sentence_tasks.append(
                 self._generate_one_sentence("articles", row["id"], row["content"])
             )
 
-        episodes_needing = conn.execute(
-            "SELECT e.id, e.description FROM episodes e "
-            "JOIN podcast_feeds pf ON e.podcast_name = pf.name "
-            "WHERE e.one_sentence_summary IS NULL AND e.description IS NOT NULL "
-            "AND e.description != '' AND pf.auto_summarize = 1"
-        ).fetchall()
-        for row in episodes_needing:
+        for row in episodes.get_needing_one_sentence(conn):
             one_sentence_tasks.append(
                 self._generate_one_sentence("episodes", row["id"], row["description"])
             )
@@ -702,7 +690,7 @@ class ContentAgent(BaseModel):
             await asyncio.gather(*one_sentence_tasks, return_exceptions=True)
 
         # Finish run record (discovery only — transcription/summarization are on-demand via API)
-        db.finish_run(
+        runs.finish(
             conn,
             run_id,
             episodes_discovered,

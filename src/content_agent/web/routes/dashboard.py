@@ -1,10 +1,9 @@
 import asyncio
-import sqlite3
 
 from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse
 
-from content_agent.db import get_dashboard_stats
+from content_agent.queries import runs
 from content_agent.web.deps import get_conn
 
 router = APIRouter()
@@ -22,7 +21,7 @@ def _run_processing_sync(config):
 def dashboard_page(request: Request):
     conn = get_conn(request)
     try:
-        stats = get_dashboard_stats(conn)
+        stats = runs.get_dashboard_stats(conn)
     finally:
         conn.close()
 

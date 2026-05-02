@@ -9,6 +9,8 @@ from fastmcp import FastMCP
 
 from . import db
 from .models import AgentConfig
+from .queries import articles, episodes
+from .queries import settings as qs
 from .summarizer import (
     extract_insights,
     extract_recommendations,
@@ -46,7 +48,7 @@ def _get_config() -> AgentConfig:
         _config = _load_config()
         # Merge DB task model overrides on top of YAML config
         conn = _get_conn()
-        db_overrides = db.get_task_model_overrides(conn)
+        db_overrides = qs.get_task_overrides(conn)
         for task_name, override in db_overrides.items():
             _config.task_models[task_name] = override
     return _config
@@ -56,7 +58,7 @@ def _get_conn():
     global _conn
     if _conn is None:
         config = _get_config()
-        _conn = db.init_db(config.db_path)
+        _conn = db.init_db(config.database_url)
     return _conn
 
 
@@ -110,7 +112,7 @@ def list_unread(limit: int = 20) -> list[dict]:
         List of episodes with podcast name, title, date, and summary preview
     """
     conn = _get_conn()
-    rows = db.get_unread_episodes(conn, limit)
+    rows = episodes.get_unread(conn, limit)
     return [
         {
             "id": row["id"],
@@ -131,7 +133,7 @@ def list_podcasts() -> list[dict]:
         List of podcasts with name, unread count, and total episode count
     """
     conn = _get_conn()
-    rows = db.get_podcast_stats(conn)
+    rows = episodes.get_stats(conn)
     return [
         {
             "podcast_name": row["podcast_name"],
@@ -153,7 +155,7 @@ def get_summary(episode_id: int) -> str:
         Complete markdown summary, or error message if not found
     """
     conn = _get_conn()
-    row = db.get_episode_by_id(conn, episode_id)
+    row = episodes.get_by_id(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -175,7 +177,7 @@ def get_transcript(episode_id: int) -> str:
         Complete transcript text, or error message if not found
     """
     conn = _get_conn()
-    row = db.get_episode_by_id(conn, episode_id)
+    row = episodes.get_by_id(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -197,7 +199,7 @@ def mark_read(episode_id: int) -> dict:
         Confirmation dict with success status
     """
     conn = _get_conn()
-    success = db.mark_episode_read(conn, episode_id)
+    success = episodes.mark_read(conn, episode_id)
     if success:
         return {"success": True, "message": f"Episode {episode_id} marked as read"}
     return {"success": False, "message": f"Episode {episode_id} not found"}
@@ -216,7 +218,7 @@ async def resummarize(episode_id: int, instructions: str) -> str:
         New summary based on transcript and custom instructions
     """
     conn = _get_conn()
-    row = db.get_episode_by_id(conn, episode_id)
+    row = episodes.get_by_id(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -247,7 +249,7 @@ def search_episodes(query: str, search_in: str = "summaries") -> list[dict]:
     query_lower = query.lower()
 
     # First get candidate episodes from DB (by title/description)
-    rows = db.search_episodes(conn, query, search_in)
+    rows = episodes.search(conn, query, search_in)
     results = []
 
     for row in rows:
@@ -328,7 +330,7 @@ def list_unread_articles(limit: int = 20) -> list[dict]:
         List of articles with feed name, title, date, author, and summary preview
     """
     conn = _get_conn()
-    rows = db.get_unread_articles(conn, limit)
+    rows = articles.get_unread(conn, limit)
     return [
         {
             "id": row["id"],
@@ -351,7 +353,7 @@ def list_article_feeds() -> list[dict]:
         List of feeds with name, unread count, and total article count
     """
     conn = _get_conn()
-    rows = db.get_feed_stats(conn)
+    rows = articles.get_stats(conn)
     return [
         {
             "feed_name": row["feed_name"],
@@ -373,7 +375,7 @@ def get_article_summary(article_id: int) -> str:
         Complete markdown summary, or error message if not found
     """
     conn = _get_conn()
-    row = db.get_article_by_id(conn, article_id)
+    row = articles.get_by_id(conn, article_id)
     if not row:
         return f"Article {article_id} not found"
 
@@ -395,7 +397,7 @@ def get_article_content(article_id: int) -> str:
         Original article content, or error message if not found
     """
     conn = _get_conn()
-    row = db.get_article_by_id(conn, article_id)
+    row = articles.get_by_id(conn, article_id)
     if not row:
         return f"Article {article_id} not found"
 
@@ -426,7 +428,7 @@ def mark_article_read(article_id: int) -> dict:
         Confirmation dict with success status
     """
     conn = _get_conn()
-    success = db.mark_article_read(conn, article_id)
+    success = articles.mark_read(conn, article_id)
     if success:
         return {"success": True, "message": f"Article {article_id} marked as read"}
     return {"success": False, "message": f"Article {article_id} not found"}
@@ -444,7 +446,7 @@ def search_articles(query: str) -> list[dict]:
     """
     conn = _get_conn()
     query_lower = query.lower()
-    rows = db.search_articles(conn, query)
+    rows = articles.search(conn, query)
     results = []
 
     for row in rows:
@@ -501,7 +503,7 @@ async def resummarize_article(article_id: int, instructions: str) -> str:
         New summary based on article content and custom instructions
     """
     conn = _get_conn()
-    row = db.get_article_by_id(conn, article_id)
+    row = articles.get_by_id(conn, article_id)
     if not row:
         return f"Article {article_id} not found"
 
@@ -535,7 +537,7 @@ async def get_sponsors(episode_id: int) -> str:
         Markdown formatted list of sponsors, or message if none found
     """
     conn = _get_conn()
-    row = db.get_episode_by_id(conn, episode_id)
+    row = episodes.get_by_id(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -564,7 +566,7 @@ async def get_micro_summary(episode_id: int) -> str:
         Markdown formatted micro summary
     """
     conn = _get_conn()
-    row = db.get_episode_by_id(conn, episode_id)
+    row = episodes.get_by_id(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -591,7 +593,7 @@ async def get_insights(episode_id: int) -> str:
         Markdown formatted list of insights
     """
     conn = _get_conn()
-    row = db.get_episode_by_id(conn, episode_id)
+    row = episodes.get_by_id(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -620,7 +622,7 @@ async def get_recommendations(episode_id: int) -> str:
         Markdown formatted list of recommendations
     """
     conn = _get_conn()
-    row = db.get_episode_by_id(conn, episode_id)
+    row = episodes.get_by_id(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 

@@ -2,12 +2,12 @@
 
 import asyncio
 import logging
-import sqlite3
 import sys
 
 import yaml
 from dotenv import load_dotenv
 
+from src.content_agent import db
 from src.content_agent.delivery import SlackDelivery, resolve_webhook_url
 from src.content_agent.digest import DigestGenerator
 from src.content_agent.models import AgentConfig
@@ -25,8 +25,7 @@ def load_config(path: str = "config.yaml") -> AgentConfig:
 
 async def main() -> None:
     config = load_config()
-    conn = sqlite3.connect(str(config.db_path))
-    conn.row_factory = sqlite3.Row
+    conn = db._connect(config.database_url)
     try:
         generator = DigestGenerator()
         digest = await generator.build(conn, config)

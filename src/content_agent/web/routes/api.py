@@ -7,7 +7,8 @@ from fastapi import APIRouter, BackgroundTasks, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from content_agent import db
+from content_agent.db import _fetchall
+from content_agent.queries import articles, episodes
 from content_agent.web.deps import get_conn
 from content_agent.web.processing import (
     run_rerun_article,
@@ -89,16 +90,17 @@ def list_episodes(
         clauses = []
         params: list = []
         if status:
-            clauses.append("status = ?")
+            clauses.append("status = %s")
             params.append(status)
         if podcast_name:
-            clauses.append("podcast_name = ?")
+            clauses.append("podcast_name = %s")
             params.append(podcast_name)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        rows = conn.execute(
-            f"SELECT * FROM episodes{where} ORDER BY published_date DESC LIMIT ?",
+        rows = _fetchall(
+            conn,
+            f"SELECT * FROM episodes{where} ORDER BY published_date DESC LIMIT %s",
             params + [limit],
-        ).fetchall()
+        )
         return [_episode_dict(r) for r in rows]
     finally:
         conn.close()
@@ -108,7 +110,7 @@ def list_episodes(
 def episode_status(request: Request, episode_id: int):
     conn = get_conn(request)
     try:
-        row = db.get_episode_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         return _episode_dict(row)
@@ -122,7 +124,7 @@ def trigger_transcribe(
 ):
     conn = get_conn(request)
     try:
-        row = db.get_episode_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         if row["status"] in ("transcribed", "summarized", "summarizing"):
@@ -145,7 +147,7 @@ async def provide_transcript(
 ):
     conn = get_conn(request)
     try:
-        row = db.get_episode_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
 
@@ -174,7 +176,7 @@ async def provide_transcript(
         with open(transcript_path, "w", encoding="utf-8") as f:
             f.write(transcript_text)
 
-        db.set_episode_transcript(conn, episode_id, str(transcript_path))
+        episodes.set_transcript(conn, episode_id, str(transcript_path))
         return ActionResponse(id=episode_id, status="transcribed", message="Transcript stored")
     finally:
         conn.close()
@@ -186,7 +188,7 @@ def trigger_summarize_episode(
 ):
     conn = get_conn(request)
     try:
-        row = db.get_episode_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         if row["status"] != "transcribed":
@@ -205,7 +207,7 @@ def trigger_summarize_episode(
 def provide_episode_summary(request: Request, episode_id: int, body: SummaryBody):
     conn = get_conn(request)
     try:
-        row = db.get_episode_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
 
@@ -217,7 +219,7 @@ def provide_episode_summary(request: Request, episode_id: int, body: SummaryBody
         with open(summary_path, "w", encoding="utf-8") as f:
             f.write(body.summary)
 
-        db.set_episode_summary(conn, episode_id, str(summary_path), body.one_sentence_summary)
+        episodes.set_summary(conn, episode_id, str(summary_path), body.one_sentence_summary)
         return ActionResponse(id=episode_id, status="summarized", message="Summary stored")
     finally:
         conn.close()
@@ -239,16 +241,17 @@ def list_articles(
         clauses = []
         params: list = []
         if status:
-            clauses.append("status = ?")
+            clauses.append("status = %s")
             params.append(status)
         if feed_name:
-            clauses.append("feed_name = ?")
+            clauses.append("feed_name = %s")
             params.append(feed_name)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        rows = conn.execute(
-            f"SELECT * FROM articles{where} ORDER BY published_date DESC LIMIT ?",
+        rows = _fetchall(
+            conn,
+            f"SELECT * FROM articles{where} ORDER BY published_date DESC LIMIT %s",
             params + [limit],
-        ).fetchall()
+        )
         return [_article_dict(r) for r in rows]
     finally:
         conn.close()
@@ -258,7 +261,7 @@ def list_articles(
 def article_status(request: Request, article_id: int):
     conn = get_conn(request)
     try:
-        row = db.get_article_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
         return _article_dict(row)
@@ -272,7 +275,7 @@ def trigger_summarize_article(
 ):
     conn = get_conn(request)
     try:
-        row = db.get_article_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
         if row["status"] in ("summarized", "summarizing"):
@@ -291,7 +294,7 @@ def trigger_summarize_article(
 def provide_article_summary(request: Request, article_id: int, body: SummaryBody):
     conn = get_conn(request)
     try:
-        row = db.get_article_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
 
@@ -303,7 +306,7 @@ def provide_article_summary(request: Request, article_id: int, body: SummaryBody
         with open(summary_path, "w", encoding="utf-8") as f:
             f.write(body.summary)
 
-        db.set_article_summary(conn, article_id, str(summary_path), body.one_sentence_summary)
+        articles.set_summary(conn, article_id, str(summary_path), body.one_sentence_summary)
         return ActionResponse(id=article_id, status="summarized", message="Summary stored")
     finally:
         conn.close()

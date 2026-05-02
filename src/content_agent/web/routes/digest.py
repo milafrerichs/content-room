@@ -2,12 +2,11 @@
 
 import asyncio
 import logging
-import sqlite3
 from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Query, Request
-from fastapi.responses import JSONResponse
 
+from content_agent import db
 from content_agent.delivery import SlackDelivery, resolve_webhook_url
 from content_agent.digest import DigestGenerator
 from content_agent.models import AgentConfig
@@ -28,15 +27,13 @@ def _run_digest_sync(config: AgentConfig, target_date: date) -> None:
 
 
 async def _run_digest(config: AgentConfig, target_date: date) -> None:
-    conn = sqlite3.connect(str(config.db_path))
-    conn.row_factory = sqlite3.Row
+    conn = db._connect(config.database_url)
     try:
         generator = DigestGenerator()
         digest = await generator.build(conn, config, target_date=target_date)
         webhook_url = resolve_webhook_url(config.digest)
-        delivery = SlackDelivery(webhook_url)
         payload = generator.format_slack_blocks(digest)
-        ok = delivery.send(payload)
+        ok = SlackDelivery(webhook_url).send(payload)
         if ok:
             logger.info("Daily digest sent for %s (%d items)", target_date, len(digest.items))
         else:

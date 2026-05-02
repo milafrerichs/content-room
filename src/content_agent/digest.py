@@ -1,11 +1,10 @@
 """Daily digest generation and Slack formatting."""
 
 import logging
-import sqlite3
 from datetime import date, timedelta
 
-from . import db
 from .models import AgentConfig, DailyDigestOutput, DigestItem
+from .queries import digest as digest_queries
 from .summarizer import generate_digest_meta, summarize_one_sentence
 
 logger = logging.getLogger(__name__)
@@ -14,14 +13,14 @@ logger = logging.getLogger(__name__)
 class DigestGenerator:
     async def build(
         self,
-        conn: sqlite3.Connection,
+        conn,
         config: AgentConfig,
         target_date: date | None = None,
     ) -> DailyDigestOutput:
         if target_date is None:
             target_date = date.today() - timedelta(days=1)
 
-        rows = db.get_items_for_date(conn, target_date)
+        rows = digest_queries.get_items_for_date(conn, target_date)
 
         kwargs = config.get_task_model_kwargs("digest_meta")
         items = []
@@ -42,7 +41,7 @@ class DigestGenerator:
                 DigestItem(
                     title=row["title"],
                     feed_name=row["feed_name"],
-                    published_date=row["published_date"],
+                    published_date=str(row["published_date"]),
                     one_sentence_summary=summary,
                     item_type=row["item_type"],
                 )

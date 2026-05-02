@@ -1,13 +1,11 @@
-import sqlite3
-
+import psycopg2
+import psycopg2.extras
 from fastapi import Request
 
 from content_agent.models import AgentConfig
 
 
-def get_conn(request: Request) -> sqlite3.Connection:
-    """Open a per-request SQLite connection using config from app state."""
+def get_conn(request: Request):
+    """Open a per-request PostgreSQL connection using config from app state."""
     config: AgentConfig = request.app.state.config
-    conn = sqlite3.connect(str(config.db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(config.database_url, cursor_factory=psycopg2.extras.RealDictCursor)

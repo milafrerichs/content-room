@@ -1,12 +1,11 @@
 """Tests for daily digest generation and Slack delivery."""
 
-import sqlite3
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from content_agent import db
+from content_agent.queries import digest as digest_queries
 from content_agent.digest import DigestGenerator
 from content_agent.delivery import SlackDelivery, resolve_webhook_url
 from content_agent.models import DailyDigestOutput, DigestConfig, DigestItem
@@ -47,21 +46,25 @@ def make_digest_output(
 
 
 def _insert_article(conn, *, title, feed_name, published_date, one_sentence_summary=None, status="summarized"):
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         """INSERT INTO articles (feed_name, title, url, published_date, content, status, one_sentence_summary)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
         (feed_name, title, f"https://example.com/{title}", published_date, "content", status, one_sentence_summary),
     )
     conn.commit()
+    cur.close()
 
 
 def _insert_episode(conn, *, title, podcast_name, published_date, one_sentence_summary=None, status="summarized"):
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         """INSERT INTO episodes (podcast_name, title, audio_url, published_date, status, one_sentence_summary)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s)""",
         (podcast_name, title, f"https://example.com/{title}.mp3", published_date, status, one_sentence_summary),
     )
     conn.commit()
+    cur.close()
 
 
 # ---------------------------------------------------------------------------
@@ -73,49 +76,43 @@ def _insert_episode(conn, *, title, podcast_name, published_date, one_sentence_s
     ("episode", 2),
     ("mixed", 2),
 ])
-def test_get_items_for_date(tmp_db, item_type, expected_count):
-    conn = db.init_db(tmp_db)
+def test_get_items_for_date(pg_conn, item_type, expected_count):
     target = "2025-01-15"
     other = "2025-01-14"
 
     if item_type == "article":
-        _insert_article(conn, title="Article A", feed_name="Feed1", published_date=target, one_sentence_summary="Summary A")
-        _insert_article(conn, title="Article B", feed_name="Feed1", published_date=target, one_sentence_summary="Summary B")
-        _insert_article(conn, title="Article Old", feed_name="Feed1", published_date=other, one_sentence_summary="Old")
+        _insert_article(pg_conn, title="Article A", feed_name="Feed1", published_date=target, one_sentence_summary="Summary A")
+        _insert_article(pg_conn, title="Article B", feed_name="Feed1", published_date=target, one_sentence_summary="Summary B")
+        _insert_article(pg_conn, title="Article Old", feed_name="Feed1", published_date=other, one_sentence_summary="Old")
     elif item_type == "episode":
-        _insert_episode(conn, title="Ep A", podcast_name="Pod1", published_date=target, one_sentence_summary="Ep Summary A")
-        _insert_episode(conn, title="Ep B", podcast_name="Pod1", published_date=target, one_sentence_summary="Ep Summary B")
-        _insert_episode(conn, title="Ep Old", podcast_name="Pod1", published_date=other, one_sentence_summary="Old ep")
+        _insert_episode(pg_conn, title="Ep A", podcast_name="Pod1", published_date=target, one_sentence_summary="Ep Summary A")
+        _insert_episode(pg_conn, title="Ep B", podcast_name="Pod1", published_date=target, one_sentence_summary="Ep Summary B")
+        _insert_episode(pg_conn, title="Ep Old", podcast_name="Pod1", published_date=other, one_sentence_summary="Old ep")
     elif item_type == "mixed":
-        _insert_article(conn, title="Article A", feed_name="Feed1", published_date=target, one_sentence_summary="Summary A")
-        _insert_article(conn, title="Article Old", feed_name="Feed1", published_date=other, one_sentence_summary="Old")
-        _insert_episode(conn, title="Ep A", podcast_name="Pod1", published_date=target, one_sentence_summary="Ep Summary A")
-        _insert_episode(conn, title="Ep Old", podcast_name="Pod1", published_date=other, one_sentence_summary="Old ep")
+        _insert_article(pg_conn, title="Article A", feed_name="Feed1", published_date=target, one_sentence_summary="Summary A")
+        _insert_article(pg_conn, title="Article Old", feed_name="Feed1", published_date=other, one_sentence_summary="Old")
+        _insert_episode(pg_conn, title="Ep A", podcast_name="Pod1", published_date=target, one_sentence_summary="Ep Summary A")
+        _insert_episode(pg_conn, title="Ep Old", podcast_name="Pod1", published_date=other, one_sentence_summary="Old ep")
 
-    rows = db.get_items_for_date(conn, date(2025, 1, 15))
+    rows = digest_queries.get_items_for_date(pg_conn, date(2025, 1, 15))
     assert len(rows) == expected_count
     titles = [r["title"] for r in rows]
     assert "Article Old" not in titles
     assert "Ep Old" not in titles
-    conn.close()
 
 
-def test_get_items_for_date_excludes_unsummarized(tmp_db):
-    conn = db.init_db(tmp_db)
-    _insert_article(conn, title="Ready", feed_name="F", published_date="2025-01-15", one_sentence_summary="s", status="summarized")
-    _insert_article(conn, title="Pending", feed_name="F", published_date="2025-01-15", status="discovered")
+def test_get_items_for_date_excludes_unsummarized(pg_conn):
+    _insert_article(pg_conn, title="Ready", feed_name="F", published_date="2025-01-15", one_sentence_summary="s", status="summarized")
+    _insert_article(pg_conn, title="Pending", feed_name="F", published_date="2025-01-15", status="discovered")
 
-    rows = db.get_items_for_date(conn, date(2025, 1, 15))
+    rows = digest_queries.get_items_for_date(pg_conn, date(2025, 1, 15))
     assert len(rows) == 1
     assert rows[0]["title"] == "Ready"
-    conn.close()
 
 
-def test_get_items_for_date_returns_empty_for_no_items(tmp_db):
-    conn = db.init_db(tmp_db)
-    rows = db.get_items_for_date(conn, date(2025, 1, 15))
+def test_get_items_for_date_returns_empty_for_no_items(pg_conn):
+    rows = digest_queries.get_items_for_date(pg_conn, date(2025, 1, 15))
     assert rows == []
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -123,10 +120,9 @@ def test_get_items_for_date_returns_empty_for_no_items(tmp_db):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_build_reuses_stored_summaries(tmp_db, tmp_config):
-    conn = db.init_db(tmp_db)
+async def test_build_reuses_stored_summaries(pg_conn, tmp_config):
     _insert_article(
-        conn,
+        pg_conn,
         title="Article with summary",
         feed_name="Feed",
         published_date="2025-01-15",
@@ -141,19 +137,17 @@ async def test_build_reuses_stored_summaries(tmp_db, tmp_config):
         )
 
         generator = DigestGenerator()
-        result = await generator.build(conn, tmp_config, target_date=date(2025, 1, 15))
+        result = await generator.build(pg_conn, tmp_config, target_date=date(2025, 1, 15))
 
     mock_one_sentence.assert_not_called()
     assert result.date == "2025-01-15"
     assert len(result.items) == 1
-    conn.close()
 
 
 @pytest.mark.asyncio
-async def test_build_generates_missing_summaries(tmp_db, tmp_config):
-    conn = db.init_db(tmp_db)
+async def test_build_generates_missing_summaries(pg_conn, tmp_config):
     _insert_article(
-        conn,
+        pg_conn,
         title="Article no summary",
         feed_name="Feed",
         published_date="2025-01-15",
@@ -169,17 +163,14 @@ async def test_build_generates_missing_summaries(tmp_db, tmp_config):
         mock_one_sentence.return_value = "Generated one-sentence summary."
 
         generator = DigestGenerator()
-        result = await generator.build(conn, tmp_config, target_date=date(2025, 1, 15))
+        result = await generator.build(pg_conn, tmp_config, target_date=date(2025, 1, 15))
 
     mock_one_sentence.assert_called_once()
     assert result.items[0].one_sentence_summary == "Generated one-sentence summary."
-    conn.close()
 
 
 @pytest.mark.asyncio
-async def test_build_returns_empty_digest_when_no_items(tmp_db, tmp_config):
-    conn = db.init_db(tmp_db)
-
+async def test_build_returns_empty_digest_when_no_items(pg_conn, tmp_config):
     with patch("content_agent.digest.generate_digest_meta") as mock_meta:
         mock_meta.return_value = MagicMock(
             overall_summary="No items today.",
@@ -187,10 +178,9 @@ async def test_build_returns_empty_digest_when_no_items(tmp_db, tmp_config):
         )
 
         generator = DigestGenerator()
-        result = await generator.build(conn, tmp_config, target_date=date(2025, 1, 15))
+        result = await generator.build(pg_conn, tmp_config, target_date=date(2025, 1, 15))
 
     assert result.items == []
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -224,9 +214,7 @@ def test_format_slack_blocks_contains_date():
     generator = DigestGenerator()
     payload = generator.format_slack_blocks(digest)
 
-    # The date should appear somewhere in the blocks
-    payload_str = str(payload)
-    assert "2025-01-15" in payload_str
+    assert "2025-01-15" in str(payload)
 
 
 def test_format_slack_blocks_contains_overall_summary():
@@ -234,8 +222,7 @@ def test_format_slack_blocks_contains_overall_summary():
     generator = DigestGenerator()
     payload = generator.format_slack_blocks(digest)
 
-    payload_str = str(payload)
-    assert "Unique sentinel summary text." in payload_str
+    assert "Unique sentinel summary text." in str(payload)
 
 
 def test_format_slack_blocks_contains_top_items():

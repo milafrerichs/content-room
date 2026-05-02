@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from content_agent import db
+from content_agent.queries import settings as qs
 from content_agent.models import TASK_LABELS, TASK_NAMES, TaskModelOverride
 from content_agent.web.deps import get_conn
 
@@ -30,7 +30,7 @@ def settings_page(request: Request):
     config = request.app.state.config
     conn = get_conn(request)
     try:
-        db_overrides = db.get_task_model_overrides(conn)
+        db_overrides = qs.get_task_overrides(conn)
     finally:
         conn.close()
 
@@ -60,8 +60,8 @@ def save_task_model(
 
     conn = get_conn(request)
     try:
-        db.set_task_model_override(conn, task_name, override)
-        db_overrides = db.get_task_model_overrides(conn)
+        qs.set_task_override(conn, task_name, override)
+        db_overrides = qs.get_task_overrides(conn)
     finally:
         conn.close()
 
@@ -87,8 +87,8 @@ def delete_task_model(request: Request, task_name: str):
 
     conn = get_conn(request)
     try:
-        db.delete_task_model_override(conn, task_name)
-        db_overrides = db.get_task_model_overrides(conn)
+        qs.delete_task_override(conn, task_name)
+        db_overrides = qs.get_task_overrides(conn)
     finally:
         conn.close()
 
