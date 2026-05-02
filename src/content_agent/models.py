@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
@@ -50,6 +51,15 @@ class ArticleFeed(BaseModel):
     category: Optional[str] = None
     auto_summarize: bool = False
     last_processed: Optional[datetime] = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> "ArticleFeed":
+        return cls(
+            name=row["name"],
+            url=row["url"],
+            category=row.get("category"),
+            auto_summarize=bool(row["auto_summarize"]),
+        )
 
 
 class Article(BaseModel):
@@ -263,6 +273,15 @@ class PodcastFeed(BaseModel):
     auto_summarize: bool = False
     last_processed: Optional[datetime] = None
 
+    @classmethod
+    def from_row(cls, row: dict) -> "PodcastFeed":
+        return cls(
+            name=row["name"],
+            url=row["url"],
+            category=row.get("category"),
+            auto_summarize=bool(row["auto_summarize"]),
+        )
+
 
 class AgentConfig(BaseModel):
     # Podcast feeds (supports legacy rss_feeds or podcast_feeds)
@@ -283,7 +302,11 @@ class AgentConfig(BaseModel):
         default_factory=lambda: Path("./article_summaries")
     )
 
-    db_path: Path = Field(default_factory=lambda: Path("./podcast_agent.db"))
+    database_url: str = Field(
+        default_factory=lambda: os.environ.get(
+            "DATABASE_URL", "postgresql://localhost/content_agent"
+        )
+    )
     whisper_model: str = "base"
     max_episodes_per_day: int = 10
     max_articles_per_day: int = 20
@@ -351,7 +374,6 @@ class AgentConfig(BaseModel):
         self.transcript_dir = self.transcript_dir.expanduser()
         self.podcast_summary_dir = self.podcast_summary_dir.expanduser()
         self.article_summary_dir = self.article_summary_dir.expanduser()
-        self.db_path = self.db_path.expanduser()
         return self
 
 

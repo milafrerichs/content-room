@@ -1,19 +1,9 @@
-import sqlite3
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, Response
 
-from content_agent.db import (
-    archive_episode,
-    get_all_episodes,
-    get_distinct_podcast_names,
-    get_episode_by_id,
-    get_episode_count,
-    mark_episode_read,
-    reset_episode_for_rerun,
-    unarchive_episode,
-)
+from content_agent.queries import episodes
 from content_agent.web.deps import get_conn
 from content_agent.web.processing import run_rerun_episode
 
@@ -26,9 +16,9 @@ PAGE_SIZE = 24
 def episodes_page(request: Request):
     conn = get_conn(request)
     try:
-        podcast_names = get_distinct_podcast_names(conn)
-        episodes = get_all_episodes(conn, limit=PAGE_SIZE, offset=0)
-        total = get_episode_count(conn)
+        podcast_names = episodes.get_podcast_names(conn)
+        episode_list = episodes.get_all(conn, limit=PAGE_SIZE, offset=0)
+        total = episodes.get_count(conn)
     finally:
         conn.close()
 
@@ -37,7 +27,7 @@ def episodes_page(request: Request):
         "episodes/list.html",
         {
             "request": request,
-            "episodes": episodes,
+            "episodes": episode_list,
             "podcast_names": podcast_names,
             "total": total,
             "page": 1,
@@ -60,7 +50,7 @@ def episodes_search(
     offset = (page - 1) * PAGE_SIZE
     conn = get_conn(request)
     try:
-        episodes = get_all_episodes(
+        episode_list = episodes.get_all(
             conn,
             podcast_name=podcast_name or None,
             status=status or None,
@@ -70,7 +60,7 @@ def episodes_search(
             limit=PAGE_SIZE,
             offset=offset,
         )
-        total = get_episode_count(
+        total = episodes.get_count(
             conn,
             podcast_name=podcast_name or None,
             status=status or None,
@@ -94,7 +84,7 @@ def episodes_search(
         "episodes/_list_partial.html",
         {
             "request": request,
-            "episodes": episodes,
+            "episodes": episode_list,
             "total": total,
             "page": page,
             "page_size": PAGE_SIZE,
@@ -107,7 +97,7 @@ def episodes_search(
 def episode_detail(request: Request, episode_id: int):
     conn = get_conn(request)
     try:
-        episode = get_episode_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id)
     finally:
         conn.close()
 
@@ -147,7 +137,7 @@ def episode_detail(request: Request, episode_id: int):
 def mark_read(request: Request, episode_id: int):
     conn = get_conn(request)
     try:
-        mark_episode_read(conn, episode_id)
+        episodes.mark_read(conn, episode_id)
     finally:
         conn.close()
     return Response(
@@ -160,7 +150,7 @@ def mark_read(request: Request, episode_id: int):
 def archive(request: Request, episode_id: int):
     conn = get_conn(request)
     try:
-        archive_episode(conn, episode_id)
+        episodes.archive(conn, episode_id)
     finally:
         conn.close()
     return Response(
@@ -173,7 +163,7 @@ def archive(request: Request, episode_id: int):
 def unarchive(request: Request, episode_id: int):
     conn = get_conn(request)
     try:
-        unarchive_episode(conn, episode_id)
+        episodes.unarchive(conn, episode_id)
     finally:
         conn.close()
     return Response(
@@ -182,7 +172,7 @@ def unarchive(request: Request, episode_id: int):
     )
 
 
-def determine_reset_status(episode: sqlite3.Row) -> str:
+def determine_reset_status(episode: dict) -> str:
     """Map the current episode state to the status it should be reset to for rerun."""
     status = episode["status"]
     if status == "failed":
@@ -201,11 +191,11 @@ def determine_reset_status(episode: sqlite3.Row) -> str:
 def episode_rerun(request: Request, episode_id: int, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        episode = get_episode_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         reset_to = determine_reset_status(episode)
-        reset_episode_for_rerun(conn, episode_id, reset_to)
+        episodes.reset_for_rerun(conn, episode_id, reset_to)
         episode_dict = dict(episode)
         episode_dict["status"] = reset_to
     finally:
@@ -224,7 +214,7 @@ def episode_rerun(request: Request, episode_id: int, background_tasks: Backgroun
 def episode_actions(request: Request, episode_id: int):
     conn = get_conn(request)
     try:
-        episode = get_episode_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         episode_dict = dict(episode)

@@ -1,49 +1,22 @@
-from typing import Optional
+"""baseline schema
 
-import psycopg2
-import psycopg2.extras
+Revision ID: 001
+Revises:
+Create Date: 2026-05-02
 
+"""
+from typing import Sequence, Union
 
-def _connect(database_url: str):
-    """Open a psycopg2 connection with RealDictCursor as the default cursor factory."""
-    return psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+from alembic import op
 
-
-def _fetchone(conn, sql: str, params=()) -> Optional[dict]:
-    cur = conn.cursor()
-    try:
-        cur.execute(sql, params)
-        return cur.fetchone()
-    finally:
-        cur.close()
+revision: str = "001"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
-def _fetchall(conn, sql: str, params=()) -> list:
-    cur = conn.cursor()
-    try:
-        cur.execute(sql, params)
-        return cur.fetchall()
-    finally:
-        cur.close()
-
-
-def _execute(conn, sql: str, params=()) -> int:
-    """Execute a write statement, commit, and return rowcount."""
-    cur = conn.cursor()
-    try:
-        cur.execute(sql, params)
-        conn.commit()
-        return cur.rowcount
-    finally:
-        cur.close()
-
-
-def init_db(database_url: str):
-    """Create schema (idempotent) and return an open connection."""
-    conn = _connect(database_url)
-    cur = conn.cursor()
-
-    cur.execute("""
+def upgrade() -> None:
+    op.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
             id SERIAL PRIMARY KEY,
             podcast_name TEXT NOT NULL,
@@ -67,8 +40,7 @@ def init_db(database_url: str):
             UNIQUE(podcast_name, audio_url)
         )
     """)
-
-    cur.execute("""
+    op.execute("""
         CREATE TABLE IF NOT EXISTS articles (
             id SERIAL PRIMARY KEY,
             feed_name TEXT NOT NULL,
@@ -91,8 +63,7 @@ def init_db(database_url: str):
             UNIQUE(feed_name, url)
         )
     """)
-
-    cur.execute("""
+    op.execute("""
         CREATE TABLE IF NOT EXISTS podcast_feeds (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
@@ -102,8 +73,7 @@ def init_db(database_url: str):
             auto_summarize INTEGER NOT NULL DEFAULT 0
         )
     """)
-
-    cur.execute("""
+    op.execute("""
         CREATE TABLE IF NOT EXISTS article_feeds (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
@@ -113,8 +83,7 @@ def init_db(database_url: str):
             auto_summarize INTEGER NOT NULL DEFAULT 0
         )
     """)
-
-    cur.execute("""
+    op.execute("""
         CREATE TABLE IF NOT EXISTS runs (
             id SERIAL PRIMARY KEY,
             started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -127,8 +96,7 @@ def init_db(database_url: str):
             articles_failed INTEGER DEFAULT 0
         )
     """)
-
-    cur.execute("""
+    op.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,
@@ -136,6 +104,11 @@ def init_db(database_url: str):
         )
     """)
 
-    conn.commit()
-    cur.close()
-    return conn
+
+def downgrade() -> None:
+    op.execute("DROP TABLE IF EXISTS settings")
+    op.execute("DROP TABLE IF EXISTS runs")
+    op.execute("DROP TABLE IF EXISTS article_feeds")
+    op.execute("DROP TABLE IF EXISTS podcast_feeds")
+    op.execute("DROP TABLE IF EXISTS articles")
+    op.execute("DROP TABLE IF EXISTS episodes")

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from content_agent.db import get_all_runs
+from content_agent.queries import runs
 from content_agent.web.deps import get_conn
 
 router = APIRouter()
@@ -11,12 +11,12 @@ router = APIRouter()
 def runs_page(request: Request):
     conn = get_conn(request)
     try:
-        runs = get_all_runs(conn)
+        runs_list = runs.get_all(conn)
     finally:
         conn.close()
 
     templates = request.app.state.templates
     return templates.TemplateResponse(
         "runs/list.html",
-        {"request": request, "runs": runs},
+        {"request": request, "runs": runs_list},
     )

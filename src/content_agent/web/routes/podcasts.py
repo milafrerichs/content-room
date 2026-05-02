@@ -1,18 +1,11 @@
-import sqlite3
-
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from content_agent import ContentAgent, db
+from content_agent import ContentAgent
+from content_agent.queries import feeds
+from content_agent.web.deps import get_conn
 
 router = APIRouter(prefix="/podcasts")
-
-
-def get_conn(request: Request) -> sqlite3.Connection:
-    config = request.app.state.config
-    conn = sqlite3.connect(str(config.db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 @router.get("", response_class=HTMLResponse)
@@ -20,12 +13,12 @@ def podcasts_page(request: Request):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feeds = db.get_podcast_feeds(conn)
+        feed_list = feeds.get_podcasts(conn)
     finally:
         conn.close()
     return templates.TemplateResponse("podcasts/list.html", {
         "request": request,
-        "feeds": feeds,
+        "feeds": feed_list,
     })
 
 
@@ -34,14 +27,14 @@ async def create_podcast(request: Request, name: str = Form(...), url: str = For
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        db.upsert_podcast_feed(conn, name, url)
+        feeds.upsert_podcast(conn, name, url)
         conn.commit()
-        feeds = db.get_podcast_feeds(conn)
+        feed_list = feeds.get_podcasts(conn)
     finally:
         conn.close()
     return templates.TemplateResponse("podcasts/_feeds_list.html", {
         "request": request,
-        "feeds": feeds,
+        "feeds": feed_list,
     })
 
 
@@ -52,16 +45,16 @@ def sync_podcast_feeds(request: Request):
     conn = get_conn(request)
     try:
         for pf in config.podcast_feeds:
-            db.upsert_podcast_feed(conn, pf.name, str(pf.url))
+            feeds.upsert_podcast(conn, pf.name, str(pf.url))
         conn.commit()
-        feeds = db.get_podcast_feeds(conn)
+        feed_list = feeds.get_podcasts(conn)
     finally:
         conn.close()
 
     templates = request.app.state.templates
     return templates.TemplateResponse("podcasts/_feeds_list.html", {
         "request": request,
-        "feeds": feeds,
+        "feeds": feed_list,
     })
 
 
@@ -69,7 +62,7 @@ def sync_podcast_feeds(request: Request):
 def delete_podcast(request: Request, podcast_name: str):
     conn = get_conn(request)
     try:
-        db.delete_podcast_feed(conn, podcast_name)
+        feeds.delete_podcast(conn, podcast_name)
         conn.commit()
     finally:
         conn.close()

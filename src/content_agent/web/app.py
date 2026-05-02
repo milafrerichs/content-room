@@ -2,10 +2,13 @@ from pathlib import Path
 
 import markdown as md_lib
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from content_agent import db
 from content_agent.models import AgentConfig
+from content_agent.queries import feeds
+from content_agent.queries import settings as qs
 
 
 def create_app(config: AgentConfig) -> FastAPI:
@@ -27,6 +30,10 @@ def create_app(config: AgentConfig) -> FastAPI:
     app.state.config = config
     app.state.templates = templates
 
+    @app.get("/health")
+    async def health():
+        return JSONResponse({"status": "ok"})
+
     app.include_router(api.router)
     app.include_router(dashboard.router)
     app.include_router(feed.router)
@@ -37,16 +44,15 @@ def create_app(config: AgentConfig) -> FastAPI:
     app.include_router(settings.router)
 
     @app.on_event("startup")
-    async def seed_feeds():
-        conn = db.init_db(config.db_path)
+    async def startup():
+        conn = db.init_db(config.database_url)
         try:
             for f in (config.podcast_feeds or []):
-                db.upsert_podcast_feed(conn, f.name, str(f.url))
+                feeds.upsert_podcast(conn, f.name, str(f.url))
             for f in (config.article_feeds or []):
-                db.upsert_article_feed(conn, f.name, str(f.url))
+                feeds.upsert_article(conn, f.name, str(f.url))
             conn.commit()
-            # Merge DB task model overrides into config
-            db_overrides = db.get_task_model_overrides(conn)
+            db_overrides = qs.get_task_overrides(conn)
             for task_name, override in db_overrides.items():
                 config.task_models[task_name] = override
         finally:
