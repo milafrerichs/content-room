@@ -1110,3 +1110,27 @@ def get_article_feeds_with_stats(conn: sqlite3.Connection) -> list[dict]:
         ORDER BY COALESCE(af.category, 'zzz'), af.name
     """).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_items_for_date(conn: sqlite3.Connection, target_date) -> list[dict]:
+    """Return all summarized articles and episodes published on target_date.
+
+    target_date: a datetime.date or ISO string (YYYY-MM-DD).
+    Returns list of dicts with keys: title, feed_name, published_date,
+    one_sentence_summary, item_type.
+    """
+    date_str = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
+    rows = conn.execute(
+        """
+        SELECT title, feed_name, published_date, one_sentence_summary, 'article' AS item_type
+        FROM articles
+        WHERE DATE(published_date) = ? AND status = 'summarized'
+        UNION ALL
+        SELECT title, podcast_name AS feed_name, published_date, one_sentence_summary, 'episode' AS item_type
+        FROM episodes
+        WHERE DATE(published_date) = ? AND status = 'summarized'
+        ORDER BY published_date DESC
+        """,
+        (date_str, date_str),
+    ).fetchall()
+    return [dict(row) for row in rows]

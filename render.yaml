@@ -13,3 +13,21 @@ services:
       name: data
       mountPath: /data
       sizeGB: 1
+
+  - type: cron
+    name: daily-digest
+    runtime: python
+    schedule: "0 7 * * *"
+    buildCommand: pip install -e .
+    startCommand: python run_digest.py
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: CONFIG_PATH
+        value: config.yaml
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1

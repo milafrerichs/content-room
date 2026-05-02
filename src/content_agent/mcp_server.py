@@ -636,5 +636,70 @@ async def get_recommendations(episode_id: int) -> str:
     return result.to_markdown(row["title"], row["podcast_name"])
 
 
+@mcp.tool()
+async def generate_digest(date: str = "") -> str:
+    """Generate a daily digest of yesterday's (or a specific date's) feed items.
+
+    Returns a markdown-formatted digest without sending it anywhere.
+
+    Args:
+        date: Target date in YYYY-MM-DD format. Defaults to yesterday.
+
+    Returns:
+        Markdown formatted daily digest
+    """
+    from datetime import date as date_type, timedelta
+    from .digest import DigestGenerator
+
+    conn = _get_conn()
+    config = _get_config()
+
+    if date:
+        target_date = date_type.fromisoformat(date)
+    else:
+        target_date = date_type.today() - timedelta(days=1)
+
+    generator = DigestGenerator()
+    digest = await generator.build(conn, config, target_date=target_date)
+    return generator.format_markdown(digest)
+
+
+@mcp.tool()
+async def send_digest(date: str = "") -> str:
+    """Generate and send the daily digest to Slack.
+
+    Args:
+        date: Target date in YYYY-MM-DD format. Defaults to yesterday.
+
+    Returns:
+        Success or error message
+    """
+    from datetime import date as date_type, timedelta
+    from .digest import DigestGenerator
+    from .delivery import SlackDelivery, resolve_webhook_url
+
+    conn = _get_conn()
+    config = _get_config()
+
+    if date:
+        target_date = date_type.fromisoformat(date)
+    else:
+        target_date = date_type.today() - timedelta(days=1)
+
+    try:
+        webhook_url = resolve_webhook_url(config.digest)
+    except ValueError as e:
+        return f"Error: {e}"
+
+    generator = DigestGenerator()
+    digest = await generator.build(conn, config, target_date=target_date)
+    payload = generator.format_slack_blocks(digest)
+    ok = SlackDelivery(webhook_url).send(payload)
+
+    if ok:
+        return f"Digest for {target_date} sent to Slack ({len(digest.items)} items)."
+    return f"Failed to send digest for {target_date}. Check logs for details."
+
+
 if __name__ == "__main__":
     mcp.run()

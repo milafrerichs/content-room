@@ -65,6 +65,48 @@ def download(podcast, count, config_path):
     click.echo(f"Done: {successful} succeeded, {failed} failed")
 
 
+@cli.command(name="digest")
+@click.option("--date", "date_str", default="", show_default=False, help="Date YYYY-MM-DD (default: yesterday).")
+@click.option("--send", "do_send", is_flag=True, default=False, help="Send to Slack instead of printing.")
+@click.option("--config", "config_path", default="config.yaml", show_default=True)
+def digest(date_str, do_send, config_path):
+    """Generate the daily digest and optionally send it to Slack."""
+    asyncio.run(_digest(date_str, do_send, config_path))
+
+
+async def _digest(date_str: str, do_send: bool, config_path: str) -> None:
+    import sqlite3
+    from datetime import date, timedelta
+    from content_agent.digest import DigestGenerator
+    from content_agent.delivery import SlackDelivery, resolve_webhook_url
+
+    config = load_config(config_path)
+    conn = sqlite3.connect(str(config.db_path))
+    conn.row_factory = sqlite3.Row
+
+    target_date = date.fromisoformat(date_str) if date_str else date.today() - timedelta(days=1)
+
+    try:
+        generator = DigestGenerator()
+        d = await generator.build(conn, config, target_date=target_date)
+
+        if do_send:
+            try:
+                webhook_url = resolve_webhook_url(config.digest)
+            except ValueError as e:
+                raise click.UsageError(str(e))
+            payload = generator.format_slack_blocks(d)
+            ok = SlackDelivery(webhook_url).send(payload)
+            if ok:
+                click.echo(f"Digest for {target_date} sent to Slack ({len(d.items)} items).")
+            else:
+                click.echo("Failed to send digest. Check logs.", err=True)
+        else:
+            click.echo(generator.format_markdown(d))
+    finally:
+        conn.close()
+
+
 async def work(config_path: str = "config.yaml"):
     config = load_config(config_path)
     agent = ContentAgent(config=config)
