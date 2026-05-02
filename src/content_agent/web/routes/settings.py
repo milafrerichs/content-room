@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 
 from content_agent.queries import settings as qs
 from content_agent.models import TASK_LABELS, TASK_NAMES, TaskModelOverride
-from content_agent.web.deps import get_conn
+from content_agent.web.deps import CurrentUser, get_conn
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -26,7 +26,7 @@ def _build_task_rows(config, db_overrides: dict) -> list[dict]:
 
 
 @router.get("", response_class=HTMLResponse)
-def settings_page(request: Request):
+def settings_page(request: Request, user: CurrentUser):
     config = request.app.state.config
     conn = get_conn(request)
     try:
@@ -38,6 +38,7 @@ def settings_page(request: Request):
     templates = request.app.state.templates
     return templates.TemplateResponse("settings/settings.html", {
         "request": request,
+        "user": user,
         "config": config,
         "task_rows": task_rows,
     })
@@ -47,6 +48,7 @@ def settings_page(request: Request):
 def save_task_model(
     request: Request,
     task_name: str,
+    user: CurrentUser,
     provider: str = Form(""),
     model: str = Form(""),
 ):
@@ -81,7 +83,7 @@ def save_task_model(
 
 
 @router.delete("/task-model/{task_name}", response_class=HTMLResponse)
-def delete_task_model(request: Request, task_name: str):
+def delete_task_model(request: Request, task_name: str, user: CurrentUser):
     if task_name not in TASK_NAMES:
         return HTMLResponse("Invalid task name", status_code=400)
 

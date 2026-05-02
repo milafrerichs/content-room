@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Signing Out — Podcast Control Room</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #f8fafc; font-family: 'DM Sans', sans-serif; }
+  </style>
+</head>
+<body class="h-full flex items-center justify-center text-slate-500 text-sm">
+  <p>Signing out…</p>
+
+  <script>
+    async function doSignOut() {
+      const publishableKey = "{{ clerk_publishable_key }}";
+      if (!publishableKey) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
+      script.setAttribute('data-clerk-publishable-key', publishableKey);
+      script.onload = async () => {
+        const clerk = window.Clerk;
+        await clerk.load();
+        await clerk.signOut();
+        window.location.href = '/login';
+      };
+      document.head.appendChild(script);
+    }
+    doSignOut();
+  </script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — Podcast Control Room</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['"Space Mono"', 'monospace'],
+            sans: ['"DM Sans"', 'sans-serif'],
+          },
+          colors: {
+            accent: { DEFAULT: '#0891b2', light: '#e0f2fe', text: '#0e7490' },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body { background: #f8fafc; font-family: 'DM Sans', sans-serif; }
+    .mono { font-family: 'Space Mono', monospace; }
+  </style>
+</head>
+<body class="h-full flex items-center justify-center text-slate-700">
+
+  <div class="w-full max-w-md px-6">
+    <!-- Logo -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="w-12 h-12 rounded-xl bg-cyan-50 border border-cyan-200 flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+        </svg>
+      </div>
+      <div class="mono text-sm text-cyan-600 font-bold tracking-wide">PODCAST CONTROL ROOM</div>
+      <p class="text-slate-500 text-sm mt-1">Sign in to continue</p>
+    </div>
+
+    <!-- Clerk sign-in widget mounts here -->
+    <div id="sign-in"></div>
+  </div>
+
+  <script>
+    async function mountClerk() {
+      const publishableKey = "{{ clerk_publishable_key }}";
+      if (!publishableKey) {
+        document.getElementById('sign-in').innerHTML =
+          '<p class="text-red-600 text-sm text-center">Auth not configured (CLERK_PUBLISHABLE_KEY missing).</p>';
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
+      script.setAttribute('data-clerk-publishable-key', publishableKey);
+      script.onload = async () => {
+        const clerk = window.Clerk;
+        await clerk.load();
+        if (clerk.user) {
+          window.location.href = '/';
+        } else {
+          clerk.mountSignIn(document.getElementById('sign-in'), {
+            afterSignInUrl: '/',
+            routing: 'hash',
+          });
+        }
+      };
+      document.head.appendChild(script);
+    }
+    mountClerk();
+  </script>
+</body>
+</html>
