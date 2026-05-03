@@ -75,14 +75,13 @@ def digest(date_str, do_send, config_path):
 
 
 async def _digest(date_str: str, do_send: bool, config_path: str) -> None:
-    import sqlite3
     from datetime import date, timedelta
+    from content_agent import db
     from content_agent.digest import DigestGenerator
     from content_agent.delivery import SlackDelivery, resolve_webhook_url
 
     config = load_config(config_path)
-    conn = sqlite3.connect(str(config.db_path))
-    conn.row_factory = sqlite3.Row
+    conn = db._connect(config.database_url)
 
     target_date = date.fromisoformat(date_str) if date_str else date.today() - timedelta(days=1)
 
