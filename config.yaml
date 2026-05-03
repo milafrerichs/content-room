@@ -48,3 +48,8 @@ anthropic_model: "claude-haiku-4-5"
 # ollama_base_url: "http://localhost:11434/v1"  # Uncomment to customize Ollama URL
 # llm_provider: "openrouter"  # Uses OPENROUTER_API_KEY env var
 openrouter_model: "google/gemini-3.1-flash-lite-preview" #anthropic/claude-haiku-4-5"  # See openrouter.ai/models for options
+
+# Daily digest configuration
+digest:
+  enabled: false
+  slack_webhook_url: ""  # or set SLACK_WEBHOOK_URL env var
