@@ -9,7 +9,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from content_agent import db
 from content_agent.models import AgentConfig
-from content_agent.queries import feeds
 from content_agent.queries import settings as qs
 from content_agent.web.auth import ClerkJWTVerifier
 from content_agent.web.deps import _extract_token
@@ -94,11 +93,6 @@ def create_app(config: AgentConfig) -> FastAPI:
     async def startup():
         conn = db.init_db(config.database_url)
         try:
-            for f in (config.podcast_feeds or []):
-                feeds.upsert_podcast(conn, f.name, str(f.url))
-            for f in (config.article_feeds or []):
-                feeds.upsert_article(conn, f.name, str(f.url))
-            conn.commit()
             db_overrides = qs.get_task_overrides(conn)
             for task_name, override in db_overrides.items():
                 config.task_models[task_name] = override

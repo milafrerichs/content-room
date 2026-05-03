@@ -17,8 +17,8 @@ def upsert_podcast(
     conn,
     name: str,
     url: str,
-    owner_type: str = "user",
-    owner_id: str = "__legacy__",
+    owner_type: str,
+    owner_id: str,
     category: Optional[str] = None,
     auto_summarize: Optional[bool] = None,
 ) -> None:
@@ -93,8 +93,8 @@ def upsert_article(
     conn,
     name: str,
     url: str,
-    owner_type: str = "user",
-    owner_id: str = "__legacy__",
+    owner_type: str,
+    owner_id: str,
     category: Optional[str] = None,
     auto_summarize: Optional[bool] = None,
 ) -> None:

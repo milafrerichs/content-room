@@ -2,7 +2,7 @@
 
 Revision ID: 002
 Revises: 001
-Create Date: 2026-05-02
+Create Date: 2026-05-03
 
 """
 from typing import Sequence, Union
@@ -26,10 +26,12 @@ def upgrade() -> None:
         )
     """)
 
+    # owner_id is nullable so the migration can run before the data migration script assigns
+    # real Clerk IDs. Run scripts/migrate_to_user.py after upgrading on an existing DB.
     op.execute("ALTER TABLE podcast_feeds ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'user'")
-    op.execute("ALTER TABLE podcast_feeds ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT '__legacy__'")
+    op.execute("ALTER TABLE podcast_feeds ADD COLUMN IF NOT EXISTS owner_id TEXT")
     op.execute("ALTER TABLE article_feeds ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'user'")
-    op.execute("ALTER TABLE article_feeds ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT '__legacy__'")
+    op.execute("ALTER TABLE article_feeds ADD COLUMN IF NOT EXISTS owner_id TEXT")
 
     op.execute("ALTER TABLE podcast_feeds DROP CONSTRAINT IF EXISTS podcast_feeds_name_key")
     op.execute("ALTER TABLE article_feeds  DROP CONSTRAINT IF EXISTS article_feeds_name_key")

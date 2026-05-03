@@ -41,16 +41,13 @@ def get_current_user(request: Request) -> UserContext:
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    # Sync user on first seen — only opens a connection when user is new
-    from content_agent.queries.users import claim_legacy_data, get_user, has_legacy_data, upsert_user
+    # Sync user on first seen
+    from content_agent.queries.users import get_user, upsert_user
 
     conn = get_conn(request)
     try:
-        existing = get_user(conn, user_id)
-        if not existing:
+        if not get_user(conn, user_id):
             upsert_user(conn, user_id, claims.get("email"), None, None)
-            if has_legacy_data(conn):
-                claim_legacy_data(conn, user_id)
     finally:
         conn.close()
 
