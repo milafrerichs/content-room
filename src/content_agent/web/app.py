@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import markdown as md_lib
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -44,11 +45,25 @@ def create_app(config: AgentConfig) -> FastAPI:
     clerk_jwks_url = os.environ.get("CLERK_JWKS_URL", "")
     clerk_jwt_issuer = os.environ.get("CLERK_JWT_ISSUER", "")
     clerk_publishable_key = os.environ.get("CLERK_PUBLISHABLE_KEY", "")
+    clerk_fapi_host = urlparse(clerk_jwt_issuer).netloc if clerk_jwt_issuer else ""
 
     app.state.clerk_verifier = ClerkJWTVerifier(clerk_jwks_url, clerk_jwt_issuer) if clerk_jwks_url else None
     app.state.clerk_publishable_key = clerk_publishable_key
 
     app.add_middleware(_AuthMiddleware)
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+            if request.headers.get("HX-Request"):
+                return HTMLResponse(
+                    '<div class="text-red-600 text-sm p-2">'
+                    'Session expired. <a href="/login" class="underline">Sign in again</a>.'
+                    "</div>",
+                    status_code=401,
+                )
+            return RedirectResponse(url="/login", status_code=302)
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     templates_dir = Path(__file__).parent.parent / "templates"
     templates = Jinja2Templates(directory=str(templates_dir))
@@ -71,7 +86,11 @@ def create_app(config: AgentConfig) -> FastAPI:
     async def login_page(request: Request):
         return templates.TemplateResponse(
             "auth/login.html",
-            {"request": request, "clerk_publishable_key": clerk_publishable_key},
+            {
+                "request": request,
+                "clerk_publishable_key": clerk_publishable_key,
+                "clerk_fapi_host": clerk_fapi_host,
+            },
         )
 
     @app.get("/logout", response_class=HTMLResponse)

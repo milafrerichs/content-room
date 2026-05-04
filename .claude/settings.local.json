@@ -4,7 +4,9 @@
       "WebFetch(domain:ai.pydantic.dev)",
       "Bash(uv run:*)",
       "Bash(curl:*)",
-      "Bash(uv add:*)"
+      "Bash(uv add:*)",
+      "WebFetch(domain:clerk.com)",
+      "WebFetch(domain:docs.clerk.io)"
     ]
   }
 }
