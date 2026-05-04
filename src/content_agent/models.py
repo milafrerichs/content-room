@@ -6,6 +6,31 @@ from pydantic import BaseModel, HttpUrl, Field, model_validator
 
 
 # =============================================================================
+# Digest Models
+# =============================================================================
+
+
+class DigestConfig(BaseModel):
+    enabled: bool = False
+    slack_webhook_url: str = ""
+
+
+class DigestItem(BaseModel):
+    title: str
+    feed_name: str
+    published_date: str
+    one_sentence_summary: str
+    item_type: Literal["episode", "article"]
+
+
+class DailyDigestOutput(BaseModel):
+    date: str
+    overall_summary: str
+    top_items: List[str]
+    items: List[DigestItem]
+
+
+# =============================================================================
 # Task Model Configuration
 # =============================================================================
 
@@ -325,6 +350,9 @@ class AgentConfig(BaseModel):
 
     # Per-task model overrides (optional, falls back to global defaults)
     task_models: Dict[str, TaskModelOverride] = Field(default_factory=dict)
+
+    # Digest configuration
+    digest: DigestConfig = Field(default_factory=DigestConfig)
 
     @property
     def active_model(self) -> str:

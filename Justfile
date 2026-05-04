@@ -16,3 +16,9 @@ db:
 
 db-stop:
 	docker compose stop db
+
+digest date="":
+	uv run news-cli digest --date {{date}}
+
+digest-send date="":
+	uv run news-cli digest --date {{date}} --send

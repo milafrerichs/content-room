@@ -1,0 +1,48 @@
+2026-05-02 18:25:08,227 - content_agent.delivery - ERROR - Slack webhook returned 400: Bad Request
+2026-05-02 18:25:08,227 - content_agent.delivery - ERROR - Failed to send Slack digest: connection error
+2026-05-02 18:25:28,893 - content_agent.delivery - ERROR - Slack webhook returned 400: Bad Request
+2026-05-02 18:25:28,893 - content_agent.delivery - ERROR - Failed to send Slack digest: connection error
+2026-05-02 18:27:00,011 - content_agent.agent - INFO - Summarizing article: Test Article
+2026-05-02 18:27:00,012 - content_agent.agent - ERROR - Error processing article Test Article: stop
+2026-05-02 18:27:00,318 - content_agent.agent - INFO - Summarizing article: Test Article
+2026-05-02 18:27:00,319 - content_agent.agent - ERROR - Error processing article Test Article: mock
+2026-05-02 18:27:00,327 - content_agent.agent - INFO - Starting content processing
+2026-05-02 18:27:00,328 - content_agent.agent - INFO - Discovery complete: 0 episodes, 0 articles discovered
+2026-05-02 18:27:00,369 - content_agent.agent - INFO - Starting content processing
+2026-05-02 18:27:00,370 - content_agent.agent - INFO - Discovery complete: 0 episodes, 0 articles discovered
+2026-05-02 18:27:00,889 - openai._base_client - INFO - Retrying request to /chat/completions in 0.417765 seconds
+2026-05-02 18:27:00,889 - openai._base_client - INFO - Retrying request to /chat/completions in 0.498411 seconds
+2026-05-02 18:27:00,889 - openai._base_client - INFO - Retrying request to /chat/completions in 0.447715 seconds
+2026-05-02 18:27:01,310 - openai._base_client - INFO - Retrying request to /chat/completions in 0.809319 seconds
+2026-05-02 18:27:01,341 - openai._base_client - INFO - Retrying request to /chat/completions in 0.843509 seconds
+2026-05-02 18:27:01,392 - openai._base_client - INFO - Retrying request to /chat/completions in 0.923311 seconds
+2026-05-02 18:27:02,125 - content_agent.agent - ERROR - One-sentence summary failed for episodes 2: Connection error.
+2026-05-02 18:27:02,189 - content_agent.agent - ERROR - One-sentence summary failed for episodes 3: Connection error.
+2026-05-02 18:27:02,320 - content_agent.agent - ERROR - One-sentence summary failed for episodes 1: Connection error.
+2026-05-02 18:27:02,408 - content_agent.delivery - ERROR - Slack webhook returned 400: Bad Request
+2026-05-02 18:27:02,409 - content_agent.delivery - ERROR - Failed to send Slack digest: connection error
+2026-05-02 18:27:12,424 - content_agent.agent - INFO - Starting content processing
+2026-05-02 18:27:12,425 - content_agent.agent - INFO - Discovery complete: 0 episodes, 0 articles discovered
+2026-05-02 18:27:12,466 - content_agent.agent - INFO - Starting content processing
+2026-05-02 18:27:12,467 - content_agent.agent - INFO - Discovery complete: 0 episodes, 0 articles discovered
+2026-05-02 18:29:09,736 - content_agent.agent - INFO - Summarizing article: Test Article
+2026-05-02 18:29:09,737 - content_agent.agent - ERROR - Error processing article Test Article: stop
+2026-05-02 18:29:10,038 - content_agent.agent - INFO - Summarizing article: Test Article
+2026-05-02 18:29:10,038 - content_agent.agent - ERROR - Error processing article Test Article: mock
+2026-05-02 18:29:10,046 - content_agent.agent - INFO - Starting content processing
+2026-05-02 18:29:10,048 - content_agent.agent - INFO - Discovery complete: 0 episodes, 0 articles discovered
+2026-05-02 18:29:10,086 - content_agent.agent - INFO - Starting content processing
+2026-05-02 18:29:10,087 - content_agent.agent - INFO - Discovery complete: 0 episodes, 0 articles discovered
+2026-05-02 18:29:10,247 - openai._base_client - INFO - Retrying request to /chat/completions in 0.467156 seconds
+2026-05-02 18:29:10,247 - openai._base_client - INFO - Retrying request to /chat/completions in 0.497995 seconds
+2026-05-02 18:29:10,247 - openai._base_client - INFO - Retrying request to /chat/completions in 0.473362 seconds
+2026-05-02 18:29:10,721 - openai._base_client - INFO - Retrying request to /chat/completions in 0.906032 seconds
+2026-05-02 18:29:10,724 - openai._base_client - INFO - Retrying request to /chat/completions in 0.952981 seconds
+2026-05-02 18:29:10,750 - openai._base_client - INFO - Retrying request to /chat/completions in 0.798672 seconds
+2026-05-02 18:29:11,553 - content_agent.agent - ERROR - One-sentence summary failed for episodes 3: Connection error.
+2026-05-02 18:29:11,632 - content_agent.agent - ERROR - One-sentence summary failed for episodes 1: Connection error.
+2026-05-02 18:29:11,684 - content_agent.agent - ERROR - One-sentence summary failed for episodes 2: Connection error.
+2026-05-02 18:29:11,776 - content_agent.delivery - ERROR - Slack webhook returned 400: Bad Request
+2026-05-02 18:29:11,776 - content_agent.delivery - ERROR - Failed to send Slack digest: connection error
+2026-05-02 19:44:12,672 - content_agent.delivery - ERROR - Slack webhook returned 400: Bad Request
+2026-05-02 19:44:12,672 - content_agent.delivery - ERROR - Failed to send Slack digest: connection error

@@ -1,12 +1,13 @@
 from typing import Literal
 
+from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-from .models import Insights, MicroSummary, OneSentenceSummary, PodcastSummary, Recommendations, SponsorInfo
+from .models import DigestItem, Insights, MicroSummary, OneSentenceSummary, PodcastSummary, Recommendations, SponsorInfo
 
 # =============================================================================
 # FABRIC PATTERN: extract_wisdom
@@ -392,6 +393,57 @@ async def summarize_one_sentence(
     )
     result = await agent.run(content)
     return result.output.summary
+
+
+# =============================================================================
+# DIGEST: meta summary (overall summary + top items)
+# =============================================================================
+_DIGEST_META_INSTRUCTIONS = """You are an expert news editor summarizing a daily digest of content items.
+
+Given a list of items with their one-sentence summaries, you will:
+1. Write a single sentence (max 25 words) that captures the overall theme or most important development of the day.
+2. Select 3 to 5 item titles that represent the most significant, interesting, or impactful content.
+
+Focus on novelty, importance, and broad relevance. Prefer items that would matter most to a curious professional."""
+
+
+class DigestMeta(BaseModel):
+    overall_summary: str
+    top_item_titles: list[str]
+
+
+async def generate_digest_meta(
+    items: list[DigestItem],
+    provider: Literal["anthropic", "ollama", "openrouter"] = "ollama",
+    model: str = "llama3.2",
+    ollama_base_url: str = "http://localhost:11434/v1",
+) -> DigestMeta:
+    """Generate overall summary and top-item selection for a daily digest."""
+    if not items:
+        return DigestMeta(overall_summary="No items today.", top_item_titles=[])
+
+    items_text = "\n".join(
+        f"- [{item.item_type}] {item.title} ({item.feed_name}): {item.one_sentence_summary}"
+        for item in items
+    )
+
+    agent = _get_agent(
+        "digest_meta",
+        DigestMeta,
+        _DIGEST_META_INSTRUCTIONS,
+        provider,
+        model,
+        ollama_base_url,
+    )
+    try:
+        result = await agent.run(items_text)
+        return result.output
+    except Exception as e:
+        logger.error(
+            f"generate_digest_meta agent.run failed [{provider}/{model}]: {type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        raise
 
 
 async def summarize_with_instructions(
