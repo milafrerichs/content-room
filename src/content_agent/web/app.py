@@ -10,8 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from content_agent import db
 from content_agent.models import AgentConfig
 from content_agent.queries import settings as qs
-from content_agent.web.auth import ClerkJWTVerifier
-from content_agent.web.deps import _extract_token
+from content_agent.web.auth import ClerkJWTVerifier, extract_token
 
 _EXEMPT_PATH_PREFIXES = ("/login", "/logout", "/health", "/webhooks/")
 
@@ -22,7 +21,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(p) for p in _EXEMPT_PATH_PREFIXES):
             return await call_next(request)
 
-        token = _extract_token(request)
+        token = extract_token(request)
         if not token:
             if request.headers.get("HX-Request"):
                 return HTMLResponse(
@@ -42,9 +41,10 @@ def create_app(config: AgentConfig) -> FastAPI:
     app = FastAPI(title="Podcast Agent Dashboard")
 
     clerk_jwks_url = os.environ.get("CLERK_JWKS_URL", "")
+    clerk_jwt_issuer = os.environ.get("CLERK_JWT_ISSUER", "")
     clerk_publishable_key = os.environ.get("CLERK_PUBLISHABLE_KEY", "")
 
-    app.state.clerk_verifier = ClerkJWTVerifier(clerk_jwks_url) if clerk_jwks_url else None
+    app.state.clerk_verifier = ClerkJWTVerifier(clerk_jwks_url, clerk_jwt_issuer) if clerk_jwks_url else None
     app.state.clerk_publishable_key = clerk_publishable_key
 
     app.add_middleware(_AuthMiddleware)

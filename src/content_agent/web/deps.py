@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, Optional
 
 import psycopg2
@@ -6,7 +7,9 @@ from fastapi import Depends, HTTPException, Request, status
 from jose import JWTError
 
 from content_agent.models import AgentConfig
-from content_agent.web.auth import ClerkJWTVerifier, UserContext
+from content_agent.web.auth import ClerkJWTVerifier, UserContext, extract_token
+
+logger = logging.getLogger(__name__)
 
 
 def get_conn(request: Request):
@@ -15,38 +18,29 @@ def get_conn(request: Request):
     return psycopg2.connect(config.database_url, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-def _extract_token(request: Request) -> Optional[str]:
-    token = request.cookies.get("__session")
-    if token:
-        return token
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[7:]
-    return None
-
-
 def get_current_user(request: Request) -> UserContext:
     verifier: ClerkJWTVerifier = request.app.state.clerk_verifier
 
-    token = _extract_token(request)
+    token = extract_token(request)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     try:
         claims = verifier.verify_token(token)
-    except JWTError:
+    except JWTError as exc:
+        logger.info("JWT verification failed: %s", exc)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     user_id = claims.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    # Sync user on first seen
     from content_agent.queries.users import get_user, upsert_user
 
     conn = get_conn(request)
     try:
         if not get_user(conn, user_id):
+            logger.info("First login for user %s", user_id)
             upsert_user(conn, user_id, claims.get("email"), None, None)
     finally:
         conn.close()

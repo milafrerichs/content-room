@@ -100,7 +100,7 @@ def articles_search(
 def article_detail(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id, user.owner)
     finally:
         conn.close()
 
@@ -133,7 +133,7 @@ def article_detail(request: Request, article_id: int, user: CurrentUser):
 def mark_read(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        articles.mark_read(conn, article_id)
+        articles.mark_read(conn, article_id, user.owner)
     finally:
         conn.close()
     return Response(
@@ -146,10 +146,10 @@ def mark_read(request: Request, article_id: int, user: CurrentUser):
 def article_summarize(request: Request, article_id: int, user: CurrentUser, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id, user.owner)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
-        articles.reset_for_rerun(conn, article_id)
+        articles.reset_for_rerun(conn, article_id, user.owner)
         article_dict = dict(article)
         article_dict["status"] = "discovered"
     finally:
@@ -168,7 +168,7 @@ def article_summarize(request: Request, article_id: int, user: CurrentUser, back
 def article_actions(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id, user.owner)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
         article_dict = dict(article)
@@ -186,7 +186,7 @@ def article_actions(request: Request, article_id: int, user: CurrentUser):
 def archive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        articles.archive(conn, article_id)
+        articles.archive(conn, article_id, user.owner)
     finally:
         conn.close()
     return Response(
@@ -199,7 +199,7 @@ def archive(request: Request, article_id: int, user: CurrentUser):
 def unarchive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        articles.unarchive(conn, article_id)
+        articles.unarchive(conn, article_id, user.owner)
     finally:
         conn.close()
     return Response(
@@ -218,7 +218,7 @@ def feeds_page(request: Request, user: CurrentUser):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feed_list = feeds.get_articles(conn, "user", user.user_id)
+        feed_list = feeds.get_articles(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse(
@@ -232,9 +232,9 @@ async def create_article_feed(request: Request, user: CurrentUser, name: str = F
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feeds.upsert_article(conn, name, url, "user", user.user_id)
+        feeds.upsert_article(conn, name, url, user.owner)
         conn.commit()
-        feed_list = feeds.get_articles(conn, "user", user.user_id)
+        feed_list = feeds.get_articles(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse(
@@ -249,9 +249,9 @@ def sync_article_feeds(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
         for af in config.article_feeds:
-            feeds.upsert_article(conn, af.name, str(af.url), "user", user.user_id)
+            feeds.upsert_article(conn, af.name, str(af.url), user.owner)
         conn.commit()
-        feed_list = feeds.get_articles(conn, "user", user.user_id)
+        feed_list = feeds.get_articles(conn, user.owner)
     finally:
         conn.close()
 
@@ -266,7 +266,7 @@ def sync_article_feeds(request: Request, user: CurrentUser):
 def delete_feed(request: Request, feed_name: str, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feeds.delete_article(conn, feed_name, "user", user.user_id)
+        feeds.delete_article(conn, feed_name, user.owner)
         conn.commit()
     finally:
         conn.close()

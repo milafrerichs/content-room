@@ -13,7 +13,7 @@ def podcasts_page(request: Request, user: CurrentUser):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feed_list = feeds.get_podcasts(conn, "user", user.user_id)
+        feed_list = feeds.get_podcasts(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse("podcasts/list.html", {
@@ -28,9 +28,9 @@ async def create_podcast(request: Request, user: CurrentUser, name: str = Form(.
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feeds.upsert_podcast(conn, name, url, "user", user.user_id)
+        feeds.upsert_podcast(conn, name, url, user.owner)
         conn.commit()
-        feed_list = feeds.get_podcasts(conn, "user", user.user_id)
+        feed_list = feeds.get_podcasts(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse("podcasts/_feeds_list.html", {
@@ -46,9 +46,9 @@ def sync_podcast_feeds(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
         for pf in config.podcast_feeds:
-            feeds.upsert_podcast(conn, pf.name, str(pf.url), "user", user.user_id)
+            feeds.upsert_podcast(conn, pf.name, str(pf.url), user.owner)
         conn.commit()
-        feed_list = feeds.get_podcasts(conn, "user", user.user_id)
+        feed_list = feeds.get_podcasts(conn, user.owner)
     finally:
         conn.close()
 
@@ -64,7 +64,7 @@ def sync_podcast_feeds(request: Request, user: CurrentUser):
 def delete_podcast(request: Request, podcast_name: str, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feeds.delete_podcast(conn, podcast_name, "user", user.user_id)
+        feeds.delete_podcast(conn, podcast_name, user.owner)
         conn.commit()
     finally:
         conn.close()

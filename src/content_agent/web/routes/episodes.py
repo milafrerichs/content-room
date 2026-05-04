@@ -98,7 +98,7 @@ def episodes_search(
 def episode_detail(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id, user.owner)
     finally:
         conn.close()
 
@@ -138,7 +138,7 @@ def episode_detail(request: Request, episode_id: int, user: CurrentUser):
 def mark_read(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episodes.mark_read(conn, episode_id)
+        episodes.mark_read(conn, episode_id, user.owner)
     finally:
         conn.close()
     return Response(
@@ -151,7 +151,7 @@ def mark_read(request: Request, episode_id: int, user: CurrentUser):
 def archive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episodes.archive(conn, episode_id)
+        episodes.archive(conn, episode_id, user.owner)
     finally:
         conn.close()
     return Response(
@@ -164,7 +164,7 @@ def archive(request: Request, episode_id: int, user: CurrentUser):
 def unarchive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episodes.unarchive(conn, episode_id)
+        episodes.unarchive(conn, episode_id, user.owner)
     finally:
         conn.close()
     return Response(
@@ -192,11 +192,11 @@ def determine_reset_status(episode: dict) -> str:
 def episode_rerun(request: Request, episode_id: int, user: CurrentUser, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id, user.owner)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         reset_to = determine_reset_status(episode)
-        episodes.reset_for_rerun(conn, episode_id, reset_to)
+        episodes.reset_for_rerun(conn, episode_id, reset_to, user.owner)
         episode_dict = dict(episode)
         episode_dict["status"] = reset_to
     finally:
@@ -215,7 +215,7 @@ def episode_rerun(request: Request, episode_id: int, user: CurrentUser, backgrou
 def episode_actions(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id, user.owner)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         episode_dict = dict(episode)

@@ -54,9 +54,9 @@ def _fetch_rss_episodes(feed_url: str) -> list[dict]:
     return episode_list
 
 
-def _feeds_context(conn, owner_type: str, owner_id: str):
-    podcast_feed_list = feeds.get_podcasts_with_stats(conn, owner_type, owner_id)
-    article_feed_list = feeds.get_articles_with_stats(conn, owner_type, owner_id)
+def _feeds_context(conn, owner):
+    podcast_feed_list = feeds.get_podcasts_with_stats(conn, owner)
+    article_feed_list = feeds.get_articles_with_stats(conn, owner)
 
     all_feeds = [
         {**f, "type": "podcast"} for f in podcast_feed_list
@@ -83,9 +83,9 @@ def feed_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, "user", user.user_id)
-        categories = feeds.get_all_categories(conn, "user", user.user_id)
-        items = feeds.get_unified(conn, "user", user.user_id, source=source or None, search=search or None)
+        sources = feeds.get_all_sources(conn, user.owner)
+        categories = feeds.get_all_categories(conn, user.owner)
+        items = feeds.get_unified(conn, user.owner, source=source or None, search=search or None)
     finally:
         conn.close()
 
@@ -135,9 +135,9 @@ def archive_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, "user", user.user_id)
+        sources = feeds.get_all_sources(conn, user.owner)
         items = feeds.get_unified(
-            conn, "user", user.user_id,
+            conn, user.owner,
             source=source or None, search=search or None, archived_only=True,
         )
     finally:
@@ -169,9 +169,9 @@ def archive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
         if kind == "episode":
-            episodes.archive(conn, item_id)
+            episodes.archive(conn, item_id, user.owner)
         else:
-            articles.archive(conn, item_id)
+            articles.archive(conn, item_id, user.owner)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -182,9 +182,9 @@ def unarchive_item(request: Request, kind: str, item_id: int, user: CurrentUser)
     conn = get_conn(request)
     try:
         if kind == "episode":
-            episodes.unarchive(conn, item_id)
+            episodes.unarchive(conn, item_id, user.owner)
         else:
-            articles.unarchive(conn, item_id)
+            articles.unarchive(conn, item_id, user.owner)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -205,9 +205,9 @@ def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser
     conn = get_conn(request)
     try:
         if kind == "episode":
-            episodes.mark_read_later(conn, item_id)
+            episodes.mark_read_later(conn, item_id, user.owner)
         else:
-            articles.mark_read_later(conn, item_id)
+            articles.mark_read_later(conn, item_id, user.owner)
         item = feeds.get_unified_item(conn, kind, item_id)
     finally:
         conn.close()
@@ -221,9 +221,9 @@ def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUs
     conn = get_conn(request)
     try:
         if kind == "episode":
-            episodes.unmark_read_later(conn, item_id)
+            episodes.unmark_read_later(conn, item_id, user.owner)
         else:
-            articles.unmark_read_later(conn, item_id)
+            articles.unmark_read_later(conn, item_id, user.owner)
         item = feeds.get_unified_item(conn, kind, item_id)
     finally:
         conn.close()
@@ -237,9 +237,9 @@ def delete_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
         if kind == "episode":
-            episodes.delete(conn, item_id)
+            episodes.delete(conn, item_id, user.owner)
         else:
-            articles.delete(conn, item_id)
+            articles.delete(conn, item_id, user.owner)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -254,9 +254,9 @@ def read_later_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, "user", user.user_id)
+        sources = feeds.get_all_sources(conn, user.owner)
         items = feeds.get_unified(
-            conn, "user", user.user_id,
+            conn, user.owner,
             source=source or None, search=search or None, read_later_only=True,
         )
     finally:
@@ -293,9 +293,9 @@ def mobile_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, "user", user.user_id)
+        sources = feeds.get_all_sources(conn, user.owner)
         items = feeds.get_unified(
-            conn, "user", user.user_id,
+            conn, user.owner,
             source=source or None,
             search=search or None,
             read_later_only=read_later == "1",
@@ -320,7 +320,7 @@ def mobile_page(
 def feeds_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
-        ctx = _feeds_context(conn, "user", user.user_id)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -337,11 +337,11 @@ def sync_all_feeds(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
         for pf in config.podcast_feeds:
-            feeds.upsert_podcast(conn, pf.name, str(pf.url), "user", user.user_id, auto_summarize=pf.auto_summarize)
+            feeds.upsert_podcast(conn, pf.name, str(pf.url), user.owner, auto_summarize=pf.auto_summarize)
         for af in config.article_feeds:
-            feeds.upsert_article(conn, af.name, str(af.url), "user", user.user_id, auto_summarize=af.auto_summarize)
+            feeds.upsert_article(conn, af.name, str(af.url), user.owner, auto_summarize=af.auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, "user", user.user_id)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -363,9 +363,9 @@ def create_podcast_feed(
 ):
     conn = get_conn(request)
     try:
-        feeds.upsert_podcast(conn, name, url, "user", user.user_id, category=category or None, auto_summarize=auto_summarize)
+        feeds.upsert_podcast(conn, name, url, user.owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, "user", user.user_id)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -399,9 +399,9 @@ def create_article_feed(
     feed_name = name.strip() or feed_title or url
     conn = get_conn(request)
     try:
-        feeds.upsert_article(conn, feed_name, feed_url, "user", user.user_id, category=category or None, auto_summarize=auto_summarize)
+        feeds.upsert_article(conn, feed_name, feed_url, user.owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, "user", user.user_id)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -420,9 +420,9 @@ def update_podcast_category(
 ):
     conn = get_conn(request)
     try:
-        feeds.update_podcast_category(conn, feed_name, "user", user.user_id, category.strip())
+        feeds.update_podcast_category(conn, feed_name, user.owner, category.strip())
         conn.commit()
-        ctx = _feeds_context(conn, "user", user.user_id)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -442,8 +442,8 @@ def toggle_podcast_auto_summarize(
 ):
     conn = get_conn(request)
     try:
-        feeds.update_podcast_auto_summarize(conn, feed_name, "user", user.user_id, auto_summarize)
-        ctx = _feeds_context(conn, "user", user.user_id)
+        feeds.update_podcast_auto_summarize(conn, feed_name, user.owner, auto_summarize)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -463,8 +463,8 @@ def toggle_article_auto_summarize(
 ):
     conn = get_conn(request)
     try:
-        feeds.update_article_auto_summarize(conn, feed_name, "user", user.user_id, auto_summarize)
-        ctx = _feeds_context(conn, "user", user.user_id)
+        feeds.update_article_auto_summarize(conn, feed_name, user.owner, auto_summarize)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -484,9 +484,9 @@ def update_article_category(
 ):
     conn = get_conn(request)
     try:
-        feeds.update_article_category(conn, feed_name, "user", user.user_id, category.strip())
+        feeds.update_article_category(conn, feed_name, user.owner, category.strip())
         conn.commit()
-        ctx = _feeds_context(conn, "user", user.user_id)
+        ctx = _feeds_context(conn, user.owner)
     finally:
         conn.close()
 
@@ -528,7 +528,7 @@ def download_episodes(
 def podcast_feed_detail(request: Request, feed_name: str, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feed_row = feeds.get_podcast_by_name(conn, feed_name, "user", user.user_id)
+        feed_row = feeds.get_podcast_by_name(conn, feed_name, user.owner)
         if feed_row is None:
             return HTMLResponse("Feed not found", status_code=404)
 
@@ -624,7 +624,7 @@ def download_single_episode(
 def delete_podcast_feed(request: Request, feed_name: str, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feeds.delete_podcast(conn, feed_name, "user", user.user_id)
+        feeds.delete_podcast(conn, feed_name, user.owner)
         conn.commit()
     finally:
         conn.close()
@@ -635,7 +635,7 @@ def delete_podcast_feed(request: Request, feed_name: str, user: CurrentUser):
 def delete_article_feed(request: Request, feed_name: str, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feeds.delete_article(conn, feed_name, "user", user.user_id)
+        feeds.delete_article(conn, feed_name, user.owner)
         conn.commit()
     finally:
         conn.close()

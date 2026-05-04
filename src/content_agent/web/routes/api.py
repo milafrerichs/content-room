@@ -111,7 +111,7 @@ def list_episodes(
 def episode_status(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         return _episode_dict(row)
@@ -125,7 +125,7 @@ def trigger_transcribe(
 ):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         if row["status"] in ("transcribed", "summarized", "summarizing"):
@@ -149,7 +149,7 @@ async def provide_transcript(
 ):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
 
@@ -190,7 +190,7 @@ def trigger_summarize_episode(
 ):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         if row["status"] != "transcribed":
@@ -209,7 +209,7 @@ def trigger_summarize_episode(
 def provide_episode_summary(request: Request, episode_id: int, user: CurrentUser, body: SummaryBody):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
 
@@ -264,7 +264,7 @@ def list_articles(
 def article_status(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        row = articles.get_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id, user.owner)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
         return _article_dict(row)
@@ -278,7 +278,7 @@ def trigger_summarize_article(
 ):
     conn = get_conn(request)
     try:
-        row = articles.get_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id, user.owner)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
         if row["status"] in ("summarized", "summarizing"):
@@ -297,7 +297,7 @@ def trigger_summarize_article(
 def provide_article_summary(request: Request, article_id: int, user: CurrentUser, body: SummaryBody):
     conn = get_conn(request)
     try:
-        row = articles.get_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id, user.owner)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
 
