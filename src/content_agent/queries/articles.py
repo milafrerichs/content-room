@@ -4,8 +4,6 @@ from content_agent.db import _execute, _fetchall, _fetchone
 from content_agent.web.auth import Owner
 from .episodes import PROCESSING_STATUSES
 
-_OWNED_FEED = "feed_name IN (SELECT name FROM article_feeds WHERE owner_type=%s AND owner_id=%s)"
-
 
 def insert(
     conn,
@@ -86,58 +84,61 @@ def get_unread(conn, limit: int = 20) -> list:
 
 
 def get_by_id(conn, article_id: int, owner: Owner) -> Optional[dict]:
+    """Fetch an article, returning None if it doesn't exist or is not owned by owner."""
     return _fetchone(
         conn,
-        f"SELECT * FROM articles WHERE id = %s AND {_OWNED_FEED}",
+        """SELECT a.* FROM articles a
+           JOIN article_feeds af ON af.name = a.feed_name
+           WHERE a.id = %s AND af.owner_type = %s AND af.owner_id = %s""",
         (article_id, owner.type, owner.id),
     )
 
 
-def mark_read(conn, article_id: int, owner: Owner) -> bool:
+def mark_read(conn, article_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE articles SET read_at = NOW() WHERE id = %s AND {_OWNED_FEED}",
-        (article_id, owner.type, owner.id),
+        "UPDATE articles SET read_at = NOW() WHERE id = %s",
+        (article_id,),
     ) > 0
 
 
-def archive(conn, article_id: int, owner: Owner) -> bool:
+def archive(conn, article_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE articles SET archived_at = NOW() WHERE id = %s AND archived_at IS NULL AND {_OWNED_FEED}",
-        (article_id, owner.type, owner.id),
+        "UPDATE articles SET archived_at = NOW() WHERE id = %s AND archived_at IS NULL",
+        (article_id,),
     ) > 0
 
 
-def unarchive(conn, article_id: int, owner: Owner) -> bool:
+def unarchive(conn, article_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE articles SET archived_at = NULL WHERE id = %s AND archived_at IS NOT NULL AND {_OWNED_FEED}",
-        (article_id, owner.type, owner.id),
+        "UPDATE articles SET archived_at = NULL WHERE id = %s AND archived_at IS NOT NULL",
+        (article_id,),
     ) > 0
 
 
-def mark_read_later(conn, article_id: int, owner: Owner) -> bool:
+def mark_read_later(conn, article_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE articles SET read_later_at = NOW() WHERE id = %s AND read_later_at IS NULL AND {_OWNED_FEED}",
-        (article_id, owner.type, owner.id),
+        "UPDATE articles SET read_later_at = NOW() WHERE id = %s AND read_later_at IS NULL",
+        (article_id,),
     ) > 0
 
 
-def unmark_read_later(conn, article_id: int, owner: Owner) -> bool:
+def unmark_read_later(conn, article_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE articles SET read_later_at = NULL WHERE id = %s AND read_later_at IS NOT NULL AND {_OWNED_FEED}",
-        (article_id, owner.type, owner.id),
+        "UPDATE articles SET read_later_at = NULL WHERE id = %s AND read_later_at IS NOT NULL",
+        (article_id,),
     ) > 0
 
 
-def delete(conn, article_id: int, owner: Owner) -> bool:
+def delete(conn, article_id: int) -> bool:
     return _execute(
         conn,
-        f"DELETE FROM articles WHERE id = %s AND {_OWNED_FEED}",
-        (article_id, owner.type, owner.id),
+        "DELETE FROM articles WHERE id = %s",
+        (article_id,),
     ) > 0
 
 
@@ -262,11 +263,11 @@ def get_feed_names(conn) -> list[str]:
     return [row["feed_name"] for row in _fetchall(conn, "SELECT DISTINCT feed_name FROM articles ORDER BY feed_name")]
 
 
-def reset_for_rerun(conn, article_id: int, owner: Owner) -> None:
+def reset_for_rerun(conn, article_id: int) -> None:
     _execute(
         conn,
-        f"UPDATE articles SET status='discovered', error_message=NULL, processed_at=NULL WHERE id=%s AND {_OWNED_FEED}",
-        (article_id, owner.type, owner.id),
+        "UPDATE articles SET status='discovered', error_message=NULL, processed_at=NULL WHERE id=%s",
+        (article_id,),
     )
 
 

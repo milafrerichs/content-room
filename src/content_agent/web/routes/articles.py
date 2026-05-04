@@ -133,13 +133,12 @@ def article_detail(request: Request, article_id: int, user: CurrentUser):
 def mark_read(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        articles.mark_read(conn, article_id, user.owner)
+        if articles.get_by_id(conn, article_id, user.owner) is None:
+            return Response(status_code=404)
+        articles.mark_read(conn, article_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/articles/{article_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})
 
 
 @router.post("/{article_id:int}/summarize", response_class=HTMLResponse)
@@ -149,7 +148,7 @@ def article_summarize(request: Request, article_id: int, user: CurrentUser, back
         article = articles.get_by_id(conn, article_id, user.owner)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
-        articles.reset_for_rerun(conn, article_id, user.owner)
+        articles.reset_for_rerun(conn, article_id)
         article_dict = dict(article)
         article_dict["status"] = "discovered"
     finally:
@@ -186,26 +185,24 @@ def article_actions(request: Request, article_id: int, user: CurrentUser):
 def archive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        articles.archive(conn, article_id, user.owner)
+        if articles.get_by_id(conn, article_id, user.owner) is None:
+            return Response(status_code=404)
+        articles.archive(conn, article_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/articles/{article_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})
 
 
 @router.post("/{article_id:int}/unarchive")
 def unarchive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        articles.unarchive(conn, article_id, user.owner)
+        if articles.get_by_id(conn, article_id, user.owner) is None:
+            return Response(status_code=404)
+        articles.unarchive(conn, article_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/articles/{article_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})
 
 
 # =============================================================================

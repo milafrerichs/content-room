@@ -54,6 +54,13 @@ def _fetch_rss_episodes(feed_url: str) -> list[dict]:
     return episode_list
 
 
+def _get_owned_item(conn, kind: str, item_id: int, owner) -> Optional[dict]:
+    """Ownership gate for kind-dispatched item routes. Returns None if not found or not owned."""
+    if kind == "episode":
+        return episodes.get_by_id(conn, item_id, owner)
+    return articles.get_by_id(conn, item_id, owner)
+
+
 def _feeds_context(conn, owner):
     podcast_feed_list = feeds.get_podcasts_with_stats(conn, owner)
     article_feed_list = feeds.get_articles_with_stats(conn, owner)
@@ -168,10 +175,12 @@ def archive_page(
 def archive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+            return HTMLResponse("", status_code=404)
         if kind == "episode":
-            episodes.archive(conn, item_id, user.owner)
+            episodes.archive(conn, item_id)
         else:
-            articles.archive(conn, item_id, user.owner)
+            articles.archive(conn, item_id)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -181,10 +190,12 @@ def archive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
 def unarchive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+            return HTMLResponse("", status_code=404)
         if kind == "episode":
-            episodes.unarchive(conn, item_id, user.owner)
+            episodes.unarchive(conn, item_id)
         else:
-            articles.unarchive(conn, item_id, user.owner)
+            articles.unarchive(conn, item_id)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -204,10 +215,12 @@ def _render_feed_item(request: Request, kind: str, item_id: int, item: dict) -> 
 def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+            return HTMLResponse("", status_code=404)
         if kind == "episode":
-            episodes.mark_read_later(conn, item_id, user.owner)
+            episodes.mark_read_later(conn, item_id)
         else:
-            articles.mark_read_later(conn, item_id, user.owner)
+            articles.mark_read_later(conn, item_id)
         item = feeds.get_unified_item(conn, kind, item_id)
     finally:
         conn.close()
@@ -220,10 +233,12 @@ def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser
 def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+            return HTMLResponse("", status_code=404)
         if kind == "episode":
-            episodes.unmark_read_later(conn, item_id, user.owner)
+            episodes.unmark_read_later(conn, item_id)
         else:
-            articles.unmark_read_later(conn, item_id, user.owner)
+            articles.unmark_read_later(conn, item_id)
         item = feeds.get_unified_item(conn, kind, item_id)
     finally:
         conn.close()
@@ -236,10 +251,12 @@ def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUs
 def delete_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+            return HTMLResponse("", status_code=404)
         if kind == "episode":
-            episodes.delete(conn, item_id, user.owner)
+            episodes.delete(conn, item_id)
         else:
-            articles.delete(conn, item_id, user.owner)
+            articles.delete(conn, item_id)
     finally:
         conn.close()
     return HTMLResponse("")

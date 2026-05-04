@@ -3,9 +3,6 @@ from typing import Optional
 from content_agent.db import _execute, _fetchall, _fetchone
 from content_agent.web.auth import Owner
 
-# Subquery that restricts an episode to feeds owned by a given owner.
-_OWNED_PODCAST = "podcast_name IN (SELECT name FROM podcast_feeds WHERE owner_type=%s AND owner_id=%s)"
-
 PROCESSING_STATUSES = ("downloading", "transcribing", "summarizing")
 
 
@@ -78,11 +75,11 @@ def update_one_sentence(conn, episode_id: int, summary: str) -> None:
     )
 
 
-def reset_for_rerun(conn, episode_id: int, reset_to_status: str, owner: Owner) -> None:
+def reset_for_rerun(conn, episode_id: int, reset_to_status: str) -> None:
     _execute(
         conn,
-        f"UPDATE episodes SET status=%s, error_message=NULL, processed_at=NULL WHERE id=%s AND {_OWNED_PODCAST}",
-        (reset_to_status, episode_id, owner.type, owner.id),
+        "UPDATE episodes SET status=%s, error_message=NULL, processed_at=NULL WHERE id=%s",
+        (reset_to_status, episode_id),
     )
 
 
@@ -106,18 +103,21 @@ def get_unread(conn, limit: int = 20) -> list:
 
 
 def get_by_id(conn, episode_id: int, owner: Owner) -> Optional[dict]:
+    """Fetch an episode, returning None if it doesn't exist or is not owned by owner."""
     return _fetchone(
         conn,
-        f"SELECT * FROM episodes WHERE id = %s AND {_OWNED_PODCAST}",
+        """SELECT e.* FROM episodes e
+           JOIN podcast_feeds pf ON pf.name = e.podcast_name
+           WHERE e.id = %s AND pf.owner_type = %s AND pf.owner_id = %s""",
         (episode_id, owner.type, owner.id),
     )
 
 
-def mark_read(conn, episode_id: int, owner: Owner) -> bool:
+def mark_read(conn, episode_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE episodes SET read_at = NOW() WHERE id = %s AND {_OWNED_PODCAST}",
-        (episode_id, owner.type, owner.id),
+        "UPDATE episodes SET read_at = NOW() WHERE id = %s",
+        (episode_id,),
     ) > 0
 
 
@@ -148,43 +148,43 @@ def search(conn, query: str, search_in: str = "summaries") -> list:
     )
 
 
-def archive(conn, episode_id: int, owner: Owner) -> bool:
+def archive(conn, episode_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE episodes SET archived_at = NOW() WHERE id = %s AND archived_at IS NULL AND {_OWNED_PODCAST}",
-        (episode_id, owner.type, owner.id),
+        "UPDATE episodes SET archived_at = NOW() WHERE id = %s AND archived_at IS NULL",
+        (episode_id,),
     ) > 0
 
 
-def unarchive(conn, episode_id: int, owner: Owner) -> bool:
+def unarchive(conn, episode_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE episodes SET archived_at = NULL WHERE id = %s AND archived_at IS NOT NULL AND {_OWNED_PODCAST}",
-        (episode_id, owner.type, owner.id),
+        "UPDATE episodes SET archived_at = NULL WHERE id = %s AND archived_at IS NOT NULL",
+        (episode_id,),
     ) > 0
 
 
-def mark_read_later(conn, episode_id: int, owner: Owner) -> bool:
+def mark_read_later(conn, episode_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE episodes SET read_later_at = NOW() WHERE id = %s AND read_later_at IS NULL AND {_OWNED_PODCAST}",
-        (episode_id, owner.type, owner.id),
+        "UPDATE episodes SET read_later_at = NOW() WHERE id = %s AND read_later_at IS NULL",
+        (episode_id,),
     ) > 0
 
 
-def unmark_read_later(conn, episode_id: int, owner: Owner) -> bool:
+def unmark_read_later(conn, episode_id: int) -> bool:
     return _execute(
         conn,
-        f"UPDATE episodes SET read_later_at = NULL WHERE id = %s AND read_later_at IS NOT NULL AND {_OWNED_PODCAST}",
-        (episode_id, owner.type, owner.id),
+        "UPDATE episodes SET read_later_at = NULL WHERE id = %s AND read_later_at IS NOT NULL",
+        (episode_id,),
     ) > 0
 
 
-def delete(conn, episode_id: int, owner: Owner) -> bool:
+def delete(conn, episode_id: int) -> bool:
     return _execute(
         conn,
-        f"DELETE FROM episodes WHERE id = %s AND {_OWNED_PODCAST}",
-        (episode_id, owner.type, owner.id),
+        "DELETE FROM episodes WHERE id = %s",
+        (episode_id,),
     ) > 0
 
 

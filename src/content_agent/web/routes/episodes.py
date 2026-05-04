@@ -138,39 +138,36 @@ def episode_detail(request: Request, episode_id: int, user: CurrentUser):
 def mark_read(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episodes.mark_read(conn, episode_id, user.owner)
+        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+            return Response(status_code=404)
+        episodes.mark_read(conn, episode_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/episodes/{episode_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/episodes/{episode_id}"})
 
 
 @router.post("/{episode_id}/archive")
 def archive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episodes.archive(conn, episode_id, user.owner)
+        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+            return Response(status_code=404)
+        episodes.archive(conn, episode_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/episodes/{episode_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/episodes/{episode_id}"})
 
 
 @router.post("/{episode_id}/unarchive")
 def unarchive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episodes.unarchive(conn, episode_id, user.owner)
+        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+            return Response(status_code=404)
+        episodes.unarchive(conn, episode_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/episodes/{episode_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/episodes/{episode_id}"})
 
 
 def determine_reset_status(episode: dict) -> str:
@@ -196,7 +193,7 @@ def episode_rerun(request: Request, episode_id: int, user: CurrentUser, backgrou
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         reset_to = determine_reset_status(episode)
-        episodes.reset_for_rerun(conn, episode_id, reset_to, user.owner)
+        episodes.reset_for_rerun(conn, episode_id, reset_to)
         episode_dict = dict(episode)
         episode_dict["status"] = reset_to
     finally:
