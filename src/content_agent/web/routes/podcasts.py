@@ -3,66 +3,68 @@ from fastapi.responses import HTMLResponse
 
 from content_agent import ContentAgent
 from content_agent.queries import feeds
-from content_agent.web.deps import get_conn
+from content_agent.web.deps import CurrentUser, get_conn
 
 router = APIRouter(prefix="/podcasts")
 
 
 @router.get("", response_class=HTMLResponse)
-def podcasts_page(request: Request):
+def podcasts_page(request: Request, user: CurrentUser):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feed_list = feeds.get_podcasts(conn)
+        feed_list = feeds.get_podcasts(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse("podcasts/list.html", {
         "request": request,
+        "user": user,
         "feeds": feed_list,
     })
 
 
 @router.post("/create", response_class=HTMLResponse)
-async def create_podcast(request: Request, name: str = Form(...), url: str = Form(...)):
+async def create_podcast(request: Request, user: CurrentUser, name: str = Form(...), url: str = Form(...)):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feeds.upsert_podcast(conn, name, url)
+        feeds.upsert_podcast(conn, name, url, user.owner)
         conn.commit()
-        feed_list = feeds.get_podcasts(conn)
+        feed_list = feeds.get_podcasts(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse("podcasts/_feeds_list.html", {
         "request": request,
+        "user": user,
         "feeds": feed_list,
     })
 
 
 @router.post("/sync", response_class=HTMLResponse)
-def sync_podcast_feeds(request: Request):
-    """Sync podcast feeds from config.yaml into the database."""
+def sync_podcast_feeds(request: Request, user: CurrentUser):
     config = request.app.state.config
     conn = get_conn(request)
     try:
         for pf in config.podcast_feeds:
-            feeds.upsert_podcast(conn, pf.name, str(pf.url))
+            feeds.upsert_podcast(conn, pf.name, str(pf.url), user.owner)
         conn.commit()
-        feed_list = feeds.get_podcasts(conn)
+        feed_list = feeds.get_podcasts(conn, user.owner)
     finally:
         conn.close()
 
     templates = request.app.state.templates
     return templates.TemplateResponse("podcasts/_feeds_list.html", {
         "request": request,
+        "user": user,
         "feeds": feed_list,
     })
 
 
 @router.delete("/{podcast_name}", response_class=HTMLResponse)
-def delete_podcast(request: Request, podcast_name: str):
+def delete_podcast(request: Request, podcast_name: str, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feeds.delete_podcast(conn, podcast_name)
+        feeds.delete_podcast(conn, podcast_name, user.owner)
         conn.commit()
     finally:
         conn.close()
@@ -70,7 +72,7 @@ def delete_podcast(request: Request, podcast_name: str):
 
 
 @router.post("/{podcast_name}/download", response_class=HTMLResponse)
-async def download_podcast(request: Request, podcast_name: str, count: int = Form(default=1)):
+async def download_podcast(request: Request, podcast_name: str, user: CurrentUser, count: int = Form(default=1)):
     config = request.app.state.config
     templates = request.app.state.templates
     agent = ContentAgent(config=config)

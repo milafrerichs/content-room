@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from content_agent.db import _fetchall
 from content_agent.queries import articles, episodes
-from content_agent.web.deps import get_conn
+from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import (
     run_rerun_article,
     run_summarize_episode,
@@ -81,6 +81,7 @@ def _article_dict(row) -> dict:
 @router.get("/episodes")
 def list_episodes(
     request: Request,
+    user: CurrentUser,
     status: Optional[str] = None,
     podcast_name: Optional[str] = None,
     limit: int = 100,
@@ -107,10 +108,10 @@ def list_episodes(
 
 
 @router.get("/episodes/{episode_id}/status")
-def episode_status(request: Request, episode_id: int):
+def episode_status(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         return _episode_dict(row)
@@ -120,11 +121,11 @@ def episode_status(request: Request, episode_id: int):
 
 @router.post("/episodes/{episode_id}/transcribe")
 def trigger_transcribe(
-    request: Request, episode_id: int, background_tasks: BackgroundTasks
+    request: Request, episode_id: int, user: CurrentUser, background_tasks: BackgroundTasks
 ):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         if row["status"] in ("transcribed", "summarized", "summarizing"):
@@ -143,11 +144,12 @@ def trigger_transcribe(
 async def provide_transcript(
     request: Request,
     episode_id: int,
+    user: CurrentUser,
     transcript_file: Optional[UploadFile] = File(None),
 ):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
 
@@ -184,11 +186,11 @@ async def provide_transcript(
 
 @router.post("/episodes/{episode_id}/summarize")
 def trigger_summarize_episode(
-    request: Request, episode_id: int, background_tasks: BackgroundTasks
+    request: Request, episode_id: int, user: CurrentUser, background_tasks: BackgroundTasks
 ):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
         if row["status"] != "transcribed":
@@ -204,10 +206,10 @@ def trigger_summarize_episode(
 
 
 @router.post("/episodes/{episode_id}/summary")
-def provide_episode_summary(request: Request, episode_id: int, body: SummaryBody):
+def provide_episode_summary(request: Request, episode_id: int, user: CurrentUser, body: SummaryBody):
     conn = get_conn(request)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id(conn, episode_id, user.owner)
         if not row:
             return JSONResponse({"error": "Episode not found"}, status_code=404)
 
@@ -232,6 +234,7 @@ def provide_episode_summary(request: Request, episode_id: int, body: SummaryBody
 @router.get("/articles")
 def list_articles(
     request: Request,
+    user: CurrentUser,
     status: Optional[str] = None,
     feed_name: Optional[str] = None,
     limit: int = 100,
@@ -258,10 +261,10 @@ def list_articles(
 
 
 @router.get("/articles/{article_id}/status")
-def article_status(request: Request, article_id: int):
+def article_status(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        row = articles.get_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id, user.owner)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
         return _article_dict(row)
@@ -271,11 +274,11 @@ def article_status(request: Request, article_id: int):
 
 @router.post("/articles/{article_id}/summarize")
 def trigger_summarize_article(
-    request: Request, article_id: int, background_tasks: BackgroundTasks
+    request: Request, article_id: int, user: CurrentUser, background_tasks: BackgroundTasks
 ):
     conn = get_conn(request)
     try:
-        row = articles.get_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id, user.owner)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
         if row["status"] in ("summarized", "summarizing"):
@@ -291,10 +294,10 @@ def trigger_summarize_article(
 
 
 @router.post("/articles/{article_id}/summary")
-def provide_article_summary(request: Request, article_id: int, body: SummaryBody):
+def provide_article_summary(request: Request, article_id: int, user: CurrentUser, body: SummaryBody):
     conn = get_conn(request)
     try:
-        row = articles.get_by_id(conn, article_id)
+        row = articles.get_by_id(conn, article_id, user.owner)
         if not row:
             return JSONResponse({"error": "Article not found"}, status_code=404)
 

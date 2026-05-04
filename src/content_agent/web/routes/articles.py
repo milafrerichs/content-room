@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from content_agent.queries import articles, feeds
-from content_agent.web.deps import get_conn
+from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_rerun_article
 
 router = APIRouter(prefix="/articles")
@@ -12,13 +12,8 @@ router = APIRouter(prefix="/articles")
 PAGE_SIZE = 24
 
 
-# =============================================================================
-# Article browsing
-# =============================================================================
-
-
 @router.get("", response_class=HTMLResponse)
-def articles_page(request: Request):
+def articles_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
         feed_names = articles.get_feed_names(conn)
@@ -32,6 +27,7 @@ def articles_page(request: Request):
         "articles/list.html",
         {
             "request": request,
+            "user": user,
             "articles": article_list,
             "feed_names": feed_names,
             "total": total,
@@ -45,6 +41,7 @@ def articles_page(request: Request):
 @router.get("/search", response_class=HTMLResponse)
 def articles_search(
     request: Request,
+    user: CurrentUser,
     feed_name: Optional[str] = None,
     status: Optional[str] = None,
     date_from: Optional[str] = None,
@@ -89,6 +86,7 @@ def articles_search(
         "articles/_article_table.html",
         {
             "request": request,
+            "user": user,
             "articles": article_list,
             "total": total,
             "page": page,
@@ -99,17 +97,16 @@ def articles_search(
 
 
 @router.get("/{article_id:int}", response_class=HTMLResponse)
-def article_detail(request: Request, article_id: int):
+def article_detail(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id, user.owner)
     finally:
         conn.close()
 
     if article is None:
         return HTMLResponse("Article not found", status_code=404)
 
-    summary_html = ""
     summary_text = ""
     if article["summary_path"]:
         from pathlib import Path
@@ -125,6 +122,7 @@ def article_detail(request: Request, article_id: int):
         "articles/detail.html",
         {
             "request": request,
+            "user": user,
             "article": article,
             "summary_html": summary_html,
         },
@@ -132,23 +130,22 @@ def article_detail(request: Request, article_id: int):
 
 
 @router.post("/{article_id:int}/read")
-def mark_read(request: Request, article_id: int):
+def mark_read(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if articles.get_by_id(conn, article_id, user.owner) is None:
+            return Response(status_code=404)
         articles.mark_read(conn, article_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/articles/{article_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})
 
 
 @router.post("/{article_id:int}/summarize", response_class=HTMLResponse)
-def article_summarize(request: Request, article_id: int, background_tasks: BackgroundTasks):
+def article_summarize(request: Request, article_id: int, user: CurrentUser, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id, user.owner)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
         articles.reset_for_rerun(conn, article_id)
@@ -167,10 +164,10 @@ def article_summarize(request: Request, article_id: int, background_tasks: Backg
 
 
 @router.get("/{article_id:int}/actions", response_class=HTMLResponse)
-def article_actions(request: Request, article_id: int):
+def article_actions(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id)
+        article = articles.get_by_id(conn, article_id, user.owner)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
         article_dict = dict(article)
@@ -185,29 +182,27 @@ def article_actions(request: Request, article_id: int):
 
 
 @router.post("/{article_id:int}/archive")
-def archive(request: Request, article_id: int):
+def archive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if articles.get_by_id(conn, article_id, user.owner) is None:
+            return Response(status_code=404)
         articles.archive(conn, article_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/articles/{article_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})
 
 
 @router.post("/{article_id:int}/unarchive")
-def unarchive(request: Request, article_id: int):
+def unarchive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if articles.get_by_id(conn, article_id, user.owner) is None:
+            return Response(status_code=404)
         articles.unarchive(conn, article_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/articles/{article_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})
 
 
 # =============================================================================
@@ -216,60 +211,59 @@ def unarchive(request: Request, article_id: int):
 
 
 @router.get("/feeds", response_class=HTMLResponse)
-def feeds_page(request: Request):
+def feeds_page(request: Request, user: CurrentUser):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feed_list = feeds.get_articles(conn)
+        feed_list = feeds.get_articles(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse(
         "articles/feeds.html",
-        {"request": request, "feeds": feed_list},
+        {"request": request, "user": user, "feeds": feed_list},
     )
 
 
 @router.post("/feeds/create", response_class=HTMLResponse)
-async def create_article_feed(request: Request, name: str = Form(...), url: str = Form(...)):
+async def create_article_feed(request: Request, user: CurrentUser, name: str = Form(...), url: str = Form(...)):
     templates = request.app.state.templates
     conn = get_conn(request)
     try:
-        feeds.upsert_article(conn, name, url)
+        feeds.upsert_article(conn, name, url, user.owner)
         conn.commit()
-        feed_list = feeds.get_articles(conn)
+        feed_list = feeds.get_articles(conn, user.owner)
     finally:
         conn.close()
     return templates.TemplateResponse(
         "articles/_feeds_list.html",
-        {"request": request, "feeds": feed_list},
+        {"request": request, "user": user, "feeds": feed_list},
     )
 
 
 @router.post("/feeds/sync", response_class=HTMLResponse)
-def sync_article_feeds(request: Request):
-    """Sync article feeds from config.yaml into the database."""
+def sync_article_feeds(request: Request, user: CurrentUser):
     config = request.app.state.config
     conn = get_conn(request)
     try:
         for af in config.article_feeds:
-            feeds.upsert_article(conn, af.name, str(af.url))
+            feeds.upsert_article(conn, af.name, str(af.url), user.owner)
         conn.commit()
-        feed_list = feeds.get_articles(conn)
+        feed_list = feeds.get_articles(conn, user.owner)
     finally:
         conn.close()
 
     templates = request.app.state.templates
     return templates.TemplateResponse(
         "articles/_feeds_list.html",
-        {"request": request, "feeds": feed_list},
+        {"request": request, "user": user, "feeds": feed_list},
     )
 
 
 @router.delete("/feeds/{feed_name}", response_class=HTMLResponse)
-def delete_feed(request: Request, feed_name: str):
+def delete_feed(request: Request, feed_name: str, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feeds.delete_article(conn, feed_name)
+        feeds.delete_article(conn, feed_name, user.owner)
         conn.commit()
     finally:
         conn.close()

@@ -162,9 +162,25 @@
          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>') }}
     </nav>
 
-    <!-- Footer -->
+    <!-- Footer / User -->
     <div class="px-5 py-4 border-t border-surface-200">
+      {% if user %}
+      <div class="flex items-center justify-between gap-2 footer-text">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-6 h-6 rounded-full bg-accent-light border border-accent/30 flex items-center justify-center flex-shrink-0 text-accent text-xs font-bold">
+            {{ (user.email or user.user_id)[0:1].upper() }}
+          </div>
+          <span class="text-xs text-slate-500 truncate">{{ user.email or user.user_id[:8] }}</span>
+        </div>
+        <a href="/logout" class="text-xs text-slate-400 hover:text-slate-600 flex-shrink-0" title="Sign out">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          </svg>
+        </a>
+      </div>
+      {% else %}
       <div class="mono text-xs text-slate-400 tracking-wider"><span class="footer-text">v1.0 · </span>local</div>
+      {% endif %}
     </div>
   </aside>
 

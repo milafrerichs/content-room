@@ -2,13 +2,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from content_agent.queries import runs
-from content_agent.web.deps import get_conn
+from content_agent.web.deps import CurrentUser, get_conn
 
 router = APIRouter()
 
 
 @router.get("/runs", response_class=HTMLResponse)
-def runs_page(request: Request):
+def runs_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
         runs_list = runs.get_all(conn)
@@ -18,5 +18,5 @@ def runs_page(request: Request):
     templates = request.app.state.templates
     return templates.TemplateResponse(
         "runs/list.html",
-        {"request": request, "runs": runs_list},
+        {"request": request, "user": user, "runs": runs_list},
     )

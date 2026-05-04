@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, Response
 
 from content_agent.queries import episodes
-from content_agent.web.deps import get_conn
+from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_rerun_episode
 
 router = APIRouter(prefix="/episodes")
@@ -13,7 +13,7 @@ PAGE_SIZE = 24
 
 
 @router.get("", response_class=HTMLResponse)
-def episodes_page(request: Request):
+def episodes_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
         podcast_names = episodes.get_podcast_names(conn)
@@ -40,6 +40,7 @@ def episodes_page(request: Request):
 @router.get("/search", response_class=HTMLResponse)
 def episodes_search(
     request: Request,
+    user: CurrentUser,
     podcast_name: Optional[str] = None,
     status: Optional[str] = None,
     date_from: Optional[str] = None,
@@ -94,10 +95,10 @@ def episodes_search(
 
 
 @router.get("/{episode_id}", response_class=HTMLResponse)
-def episode_detail(request: Request, episode_id: int):
+def episode_detail(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id, user.owner)
     finally:
         conn.close()
 
@@ -134,42 +135,39 @@ def episode_detail(request: Request, episode_id: int):
 
 
 @router.post("/{episode_id}/read")
-def mark_read(request: Request, episode_id: int):
+def mark_read(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+            return Response(status_code=404)
         episodes.mark_read(conn, episode_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/episodes/{episode_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/episodes/{episode_id}"})
 
 
 @router.post("/{episode_id}/archive")
-def archive(request: Request, episode_id: int):
+def archive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+            return Response(status_code=404)
         episodes.archive(conn, episode_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/episodes/{episode_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/episodes/{episode_id}"})
 
 
 @router.post("/{episode_id}/unarchive")
-def unarchive(request: Request, episode_id: int):
+def unarchive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
+        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+            return Response(status_code=404)
         episodes.unarchive(conn, episode_id)
     finally:
         conn.close()
-    return Response(
-        status_code=200,
-        headers={"HX-Redirect": f"/episodes/{episode_id}"},
-    )
+    return Response(status_code=200, headers={"HX-Redirect": f"/episodes/{episode_id}"})
 
 
 def determine_reset_status(episode: dict) -> str:
@@ -188,10 +186,10 @@ def determine_reset_status(episode: dict) -> str:
 
 
 @router.post("/{episode_id}/rerun", response_class=HTMLResponse)
-def episode_rerun(request: Request, episode_id: int, background_tasks: BackgroundTasks):
+def episode_rerun(request: Request, episode_id: int, user: CurrentUser, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id, user.owner)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         reset_to = determine_reset_status(episode)
@@ -211,10 +209,10 @@ def episode_rerun(request: Request, episode_id: int, background_tasks: Backgroun
 
 
 @router.get("/{episode_id}/actions", response_class=HTMLResponse)
-def episode_actions(request: Request, episode_id: int):
+def episode_actions(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id)
+        episode = episodes.get_by_id(conn, episode_id, user.owner)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         episode_dict = dict(episode)

@@ -1,6 +1,7 @@
 from typing import Optional
 
 from content_agent.db import _execute, _fetchall, _fetchone
+from content_agent.web.auth import Owner
 
 PROCESSING_STATUSES = ("downloading", "transcribing", "summarizing")
 
@@ -101,8 +102,15 @@ def get_unread(conn, limit: int = 20) -> list:
     )
 
 
-def get_by_id(conn, episode_id: int) -> Optional[dict]:
-    return _fetchone(conn, "SELECT * FROM episodes WHERE id = %s", (episode_id,))
+def get_by_id(conn, episode_id: int, owner: Owner) -> Optional[dict]:
+    """Fetch an episode, returning None if it doesn't exist or is not owned by owner."""
+    return _fetchone(
+        conn,
+        """SELECT e.* FROM episodes e
+           JOIN podcast_feeds pf ON pf.name = e.podcast_name
+           WHERE e.id = %s AND pf.owner_type = %s AND pf.owner_id = %s""",
+        (episode_id, owner.type, owner.id),
+    )
 
 
 def mark_read(conn, episode_id: int) -> bool:
