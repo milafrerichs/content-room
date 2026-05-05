@@ -72,6 +72,15 @@
                class="rounded border-surface-300 text-accent focus:ring-accent" />
         <label for="podcast-auto-summarize" class="mono text-xs text-slate-400 whitespace-nowrap">Auto-summarize</label>
       </div>
+      {% if user.active_org_id and user.org_role == 'org:admin' %}
+      <div class="w-28">
+        <label class="block mono text-xs text-slate-400 tracking-wider mb-1">OWNER</label>
+        <select name="owner_type" class="form-input w-full rounded-lg px-3 py-2 text-sm">
+          <option value="user">Personal</option>
+          <option value="org">Org</option>
+        </select>
+      </div>
+      {% endif %}
       <button type="submit"
               class="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-text transition-colors whitespace-nowrap">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,6 +121,15 @@
                class="rounded border-surface-300 text-accent focus:ring-accent" />
         <label for="article-auto-summarize" class="mono text-xs text-slate-400 whitespace-nowrap">Auto-summarize</label>
       </div>
+      {% if user.active_org_id and user.org_role == 'org:admin' %}
+      <div class="w-28">
+        <label class="block mono text-xs text-slate-400 tracking-wider mb-1">OWNER</label>
+        <select name="owner_type" class="form-input w-full rounded-lg px-3 py-2 text-sm">
+          <option value="user">Personal</option>
+          <option value="org">Org</option>
+        </select>
+      </div>
+      {% endif %}
       <button type="submit"
               class="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-text transition-colors whitespace-nowrap">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

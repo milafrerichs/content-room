@@ -13,7 +13,8 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi import HTTPException
 
 from content_agent.feed_discovery import discover_feed
-from content_agent.queries import articles, episodes, feeds, item_state, subscriptions
+from content_agent.queries import articles, episodes, feeds, item_state, shared_items, subscriptions
+from content_agent.web.auth import Owner
 from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_download_single_episode
 
@@ -197,14 +198,14 @@ def unarchive_item(request: Request, kind: str, item_id: int, user: CurrentUser)
     return HTMLResponse("")
 
 
-def _render_feed_item(request: Request, kind: str, item_id: int, item: dict) -> Response:
+def _render_feed_item(request: Request, kind: str, item_id: int, item: dict, user=None) -> Response:
     templates = request.app.state.templates
     hx_target = request.headers.get("HX-Target", "")
     if hx_target.startswith("card-"):
         template = "feed/_mobile_card.html"
     else:
         template = "feed/_feed_item.html"
-    return templates.TemplateResponse(template, {"request": request, "item": item})
+    return templates.TemplateResponse(template, {"request": request, "item": item, "user": user})
 
 
 @router.post("/feed/{kind}/{item_id}/read-later", response_class=HTMLResponse)
@@ -219,7 +220,7 @@ def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser
         conn.close()
     if not item:
         return HTMLResponse("")
-    return _render_feed_item(request, kind, item_id, item)
+    return _render_feed_item(request, kind, item_id, item, user=user)
 
 
 @router.post("/feed/{kind}/{item_id}/unread-later", response_class=HTMLResponse)
@@ -234,7 +235,7 @@ def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUs
         conn.close()
     if not item:
         return HTMLResponse("")
-    return _render_feed_item(request, kind, item_id, item)
+    return _render_feed_item(request, kind, item_id, item, user=user)
 
 
 @router.delete("/feed/{kind}/{item_id}", response_class=HTMLResponse)
@@ -378,10 +379,15 @@ def create_podcast_feed(
     url: str = Form(...),
     category: str = Form(""),
     auto_summarize: bool = Form(False),
+    owner_type: str = Form("user"),
 ):
+    if owner_type == "org" and user.active_org_id and user.org_role == "org:admin":
+        owner = Owner.org(user.active_org_id)
+    else:
+        owner = user.owner
     conn = get_conn(request)
     try:
-        feeds.upsert_podcast(conn, name, url, user.owner, category=category or None, auto_summarize=auto_summarize)
+        feeds.upsert_podcast(conn, name, url, owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
         ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
     finally:
@@ -402,6 +408,7 @@ def create_article_feed(
     url: str = Form(...),
     category: str = Form(""),
     auto_summarize: bool = Form(False),
+    owner_type: str = Form("user"),
 ):
     templates = request.app.state.templates
 
@@ -414,10 +421,14 @@ def create_article_feed(
             status_code=422,
         )
 
+    if owner_type == "org" and user.active_org_id and user.org_role == "org:admin":
+        owner = Owner.org(user.active_org_id)
+    else:
+        owner = user.owner
     feed_name = name.strip() or feed_title or url
     conn = get_conn(request)
     try:
-        feeds.upsert_article(conn, feed_name, feed_url, user.owner, category=category or None, auto_summarize=auto_summarize)
+        feeds.upsert_article(conn, feed_name, feed_url, owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
         ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
     finally:
@@ -748,4 +759,67 @@ def toggle_share_feed(request: Request, feed_type: str, feed_id: int, user: Curr
         f'<button hx-post="/feeds/{feed_type}/{feed_id}/share" hx-target="this" hx-swap="outerHTML" '
         f'class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs '
         f'bg-surface-100 text-slate-400 border border-surface-200 hover:bg-surface-200 transition-colors">Share</button>'
+    )
+
+
+@router.post("/feed/{kind}/{item_id}/share-to-org", response_class=HTMLResponse)
+def share_item_to_org(
+    request: Request,
+    kind: str,
+    item_id: int,
+    user: CurrentUser,
+    note: str = Form(""),
+):
+    if not user.active_org_id:
+        return HTMLResponse("", status_code=403)
+    conn = get_conn(request)
+    try:
+        shared_items.share_item(conn, user.active_org_id, user.user_id, kind, item_id, note or None)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button id="share-btn-{kind}-{item_id}" '
+        f'hx-delete="/feed/{kind}/{item_id}/share-to-org" hx-target="this" hx-swap="outerHTML" '
+        f'class="p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 rounded transition-colors" '
+        f'title="Shared to Org (click to unshare)">'
+        f'<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">'
+        f'<path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>'
+        f'</svg></button>'
+    )
+
+
+@router.delete("/feed/{kind}/{item_id}/share-to-org", response_class=HTMLResponse)
+def unshare_item_from_org(request: Request, kind: str, item_id: int, user: CurrentUser):
+    if not user.active_org_id:
+        return HTMLResponse("", status_code=403)
+    conn = get_conn(request)
+    try:
+        shared_items.unshare_item(conn, user.active_org_id, kind, item_id)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button id="share-btn-{kind}-{item_id}" '
+        f'hx-post="/feed/{kind}/{item_id}/share-to-org" hx-target="this" hx-swap="outerHTML" '
+        f'class="p-1 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded transition-colors" '
+        f'title="Share to Org">'
+        f'<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" '
+        f'd="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>'
+        f'</svg></button>'
+    )
+
+
+@router.get("/org/shared", response_class=HTMLResponse)
+def org_shared_page(request: Request, user: CurrentUser):
+    if not user.active_org_id:
+        return HTMLResponse("Switch to an org context to view shared items.", status_code=403)
+    conn = get_conn(request)
+    try:
+        items = shared_items.get_shared_items(conn, user.active_org_id)
+    finally:
+        conn.close()
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/org_shared.html",
+        {"request": request, "user": user, "items": items},
     )
