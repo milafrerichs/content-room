@@ -10,8 +10,10 @@ import feedparser
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
+from fastapi import HTTPException
+
 from content_agent.feed_discovery import discover_feed
-from content_agent.queries import articles, episodes, feeds
+from content_agent.queries import articles, episodes, feeds, subscriptions
 from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_download_single_episode
 
@@ -671,3 +673,91 @@ def delete_article_feed(request: Request, feed_name: str, user: CurrentUser):
     finally:
         conn.close()
     return HTMLResponse("")
+
+
+@router.get("/feeds/discover", response_class=HTMLResponse)
+def discover_feeds_page(request: Request, user: CurrentUser):
+    if not user.active_org_id:
+        return HTMLResponse("Switch to an org context to discover shared feeds.", status_code=403)
+
+    conn = get_conn(request)
+    try:
+        discoverable = subscriptions.get_discoverable_feeds(conn, user.active_org_id)
+        my_sub_podcast_ids = subscriptions.get_subscriber_feed_ids(conn, "user", user.user_id, "podcast")
+        my_sub_article_ids = subscriptions.get_subscriber_feed_ids(conn, "user", user.user_id, "article")
+    finally:
+        conn.close()
+
+    for feed in discoverable:
+        sub_ids = my_sub_podcast_ids if feed["feed_type"] == "podcast" else my_sub_article_ids
+        feed["subscribed"] = feed["feed_id"] in sub_ids
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/discover.html",
+        {"request": request, "user": user, "feeds": discoverable},
+    )
+
+
+@router.post("/feeds/{feed_type}/{feed_id}/subscribe", response_class=HTMLResponse)
+def subscribe_feed(request: Request, feed_type: str, feed_id: int, user: CurrentUser):
+    conn = get_conn(request)
+    try:
+        subscriptions.subscribe(conn, "user", user.user_id, feed_type, feed_id)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button hx-delete="/feeds/{feed_type}/{feed_id}/unsubscribe" '
+        f'hx-target="closest div" hx-swap="outerHTML" '
+        f'class="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 '
+        f'text-xs rounded-lg hover:bg-emerald-100 transition-colors mono">Unsubscribe</button>'
+    )
+
+
+@router.delete("/feeds/{feed_type}/{feed_id}/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_feed(request: Request, feed_type: str, feed_id: int, user: CurrentUser):
+    conn = get_conn(request)
+    try:
+        subscriptions.unsubscribe(conn, "user", user.user_id, feed_type, feed_id)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button hx-post="/feeds/{feed_type}/{feed_id}/subscribe" '
+        f'hx-target="closest div" hx-swap="outerHTML" '
+        f'class="px-3 py-1.5 bg-white text-slate-600 border border-surface-200 '
+        f'text-xs rounded-lg hover:border-accent hover:text-accent transition-colors mono">Subscribe</button>'
+    )
+
+
+@router.post("/feeds/{feed_type}/{feed_id}/share", response_class=HTMLResponse)
+def toggle_share_feed(request: Request, feed_type: str, feed_id: int, user: CurrentUser):
+    if user.org_role != "org:admin":
+        raise HTTPException(status_code=403, detail="Only org admins can share feeds")
+
+    conn = get_conn(request)
+    try:
+        table = "podcast_feeds" if feed_type == "podcast" else "article_feeds"
+        cur = conn.cursor()
+        cur.execute(f"SELECT is_shared FROM {table} WHERE id = %s AND owner_type = %s AND owner_id = %s",
+                    (feed_id, user.owner.type, user.owner.id))
+        row = cur.fetchone()
+        cur.close()
+        if row is None:
+            raise HTTPException(status_code=404)
+        new_shared = not row["is_shared"]
+        feeds.toggle_shared(conn, feed_type, feed_id, user.owner, new_shared)
+        conn.commit()
+    finally:
+        conn.close()
+
+    if new_shared:
+        return HTMLResponse(
+            f'<button hx-post="/feeds/{feed_type}/{feed_id}/share" hx-target="this" hx-swap="outerHTML" '
+            f'class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs '
+            f'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors">Shared</button>'
+        )
+    return HTMLResponse(
+        f'<button hx-post="/feeds/{feed_type}/{feed_id}/share" hx-target="this" hx-swap="outerHTML" '
+        f'class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs '
+        f'bg-surface-100 text-slate-400 border border-surface-200 hover:bg-surface-200 transition-colors">Share</button>'
+    )

@@ -74,6 +74,15 @@ def init_db(database_url: str):
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS canonical_feeds (
+            id SERIAL PRIMARY KEY,
+            url TEXT NOT NULL UNIQUE,
+            feed_type TEXT NOT NULL,
+            last_fetched_at TIMESTAMPTZ
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS podcast_feeds (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
@@ -82,7 +91,9 @@ def init_db(database_url: str):
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             auto_summarize INTEGER NOT NULL DEFAULT 0,
             owner_type TEXT NOT NULL DEFAULT 'user',
-            owner_id TEXT
+            owner_id TEXT,
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
+            is_shared BOOLEAN NOT NULL DEFAULT FALSE
         )
     """)
 
@@ -95,7 +106,21 @@ def init_db(database_url: str):
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             auto_summarize INTEGER NOT NULL DEFAULT 0,
             owner_type TEXT NOT NULL DEFAULT 'user',
-            owner_id TEXT
+            owner_id TEXT,
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
+            is_shared BOOLEAN NOT NULL DEFAULT FALSE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS feed_subscriptions (
+            id SERIAL PRIMARY KEY,
+            subscriber_type TEXT NOT NULL,
+            subscriber_id TEXT NOT NULL,
+            feed_type TEXT NOT NULL,
+            feed_id INTEGER NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (subscriber_type, subscriber_id, feed_type, feed_id)
         )
     """)
 
@@ -120,6 +145,7 @@ def init_db(database_url: str):
             read_at TIMESTAMPTZ,
             archived_at TIMESTAMPTZ,
             read_later_at TIMESTAMPTZ,
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
             UNIQUE(podcast_feed_id, audio_url)
         )
     """)
@@ -144,6 +170,7 @@ def init_db(database_url: str):
             read_at TIMESTAMPTZ,
             archived_at TIMESTAMPTZ,
             read_later_at TIMESTAMPTZ,
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
             UNIQUE(article_feed_id, url)
         )
     """)

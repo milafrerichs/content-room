@@ -132,6 +132,15 @@ def get_podcast_by_name(conn, name: str, owner: Owner) -> Optional[dict]:
     )
 
 
+def toggle_shared(conn, feed_type: str, feed_id: int, owner: Owner, is_shared: bool) -> bool:
+    table = "podcast_feeds" if feed_type == "podcast" else "article_feeds"
+    return _execute(
+        conn,
+        f"UPDATE {table} SET is_shared = %s WHERE id = %s AND owner_type = %s AND owner_id = %s",
+        (is_shared, feed_id, owner.type, owner.id),
+    ) > 0
+
+
 def _owner_clause(owner: Owner, active_org_id: Optional[str], table_alias: str) -> tuple[str, list]:
     """Build WHERE clause fragment for owner + optional org visibility."""
     if active_org_id:
@@ -146,7 +155,7 @@ def get_podcasts_with_stats(conn, owner: Owner, active_org_id: Optional[str] = N
         conn,
         f"""
         SELECT pf.id, pf.name, pf.url, pf.category, pf.auto_summarize,
-               pf.owner_type, pf.owner_id,
+               pf.owner_type, pf.owner_id, pf.is_shared,
                MAX(e.published_date) as last_item_date,
                COUNT(e.id) as item_count
         FROM podcast_feeds pf
@@ -165,7 +174,7 @@ def get_articles_with_stats(conn, owner: Owner, active_org_id: Optional[str] = N
         conn,
         f"""
         SELECT af.id, af.name, af.url, af.category, af.auto_summarize,
-               af.owner_type, af.owner_id,
+               af.owner_type, af.owner_id, af.is_shared,
                MAX(a.published_date) as last_item_date,
                COUNT(a.id) as item_count
         FROM article_feeds af
@@ -229,6 +238,25 @@ def get_all_categories(conn, owner: Owner, active_org_id: Optional[str] = None) 
     )]
 
 
+def _visible_feed_ids_subquery(owner: Owner, active_org_id: Optional[str], feed_type: str) -> tuple[str, list]:
+    """Build a subquery returning feed IDs visible to this user (owned + org + subscribed)."""
+    table = "podcast_feeds" if feed_type == "podcast" else "article_feeds"
+    params: list = [owner.type, owner.id]
+    org_clause = ""
+    if active_org_id:
+        org_clause = "OR (owner_type = 'org' AND owner_id = %s)"
+        params.append(active_org_id)
+    params.extend(["user", owner.id, feed_type])
+    subquery = f"""
+        SELECT id FROM {table}
+        WHERE (owner_type = %s AND owner_id = %s) {org_clause}
+        UNION
+        SELECT feed_id FROM feed_subscriptions
+        WHERE subscriber_type = %s AND subscriber_id = %s AND feed_type = %s
+    """
+    return subquery, params
+
+
 def get_unified(
     conn,
     owner: Owner,
@@ -240,13 +268,13 @@ def get_unified(
     read_later_only: bool = False,
     limit: int = 200,
 ) -> list[dict]:
-    owner_ep, params_ep_owner = _owner_clause(owner, active_org_id, "pf")
-    owner_art, params_art_owner = _owner_clause(owner, active_org_id, "af")
+    ep_sub, ep_sub_params = _visible_feed_ids_subquery(owner, active_org_id, "podcast")
+    art_sub, art_sub_params = _visible_feed_ids_subquery(owner, active_org_id, "article")
 
-    clauses_ep: list[str] = [owner_ep]
-    clauses_art: list[str] = [owner_art]
-    params_ep: list = list(params_ep_owner)
-    params_art: list = list(params_art_owner)
+    clauses_ep: list[str] = [f"e.podcast_feed_id IN ({ep_sub})"]
+    clauses_art: list[str] = [f"a.article_feed_id IN ({art_sub})"]
+    params_ep: list = list(ep_sub_params)
+    params_art: list = list(art_sub_params)
 
     if archived_only:
         clauses_ep.append("e.archived_at IS NOT NULL")

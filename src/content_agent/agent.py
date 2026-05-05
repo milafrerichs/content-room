@@ -133,6 +133,18 @@ class ContentAgent(BaseModel):
         '''
         return self.run_applescript(script)
 
+    def _get_or_create_canonical_feed(self, conn, url: str, feed_type: str) -> int:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO canonical_feeds (url, feed_type) VALUES (%s, %s) ON CONFLICT (url) DO NOTHING",
+            (url, feed_type),
+        )
+        cur.execute("SELECT id FROM canonical_feeds WHERE url = %s", (url,))
+        row = cur.fetchone()
+        cur.close()
+        conn.commit()
+        return row["id"]
+
     async def fetch_rss_feed(self, feed: PodcastFeed) -> List[PodcastEpisode]:
         """Fetch and parse RSS feed to get recent episodes"""
         logger.info(f"Fetching RSS feed: {feed.name}")
@@ -642,11 +654,21 @@ class ContentAgent(BaseModel):
             return_exceptions=True,
         )
 
+        # Build canonical feed ID cache keyed by (url, feed_type)
+        canonical_cache: dict[tuple, int] = {}
+
+        def _canonical_id(url: str, feed_type: str) -> int:
+            key = (url, feed_type)
+            if key not in canonical_cache:
+                canonical_cache[key] = self._get_or_create_canonical_feed(conn, url, feed_type)
+            return canonical_cache[key]
+
         # Insert discovered episodes into DB
-        for result in podcast_results:
+        for feed_obj, result in zip(podcast_feeds, podcast_results):
             if isinstance(result, Exception):
                 logger.error(f"Feed fetch failed: {result}")
                 continue
+            cf_id = _canonical_id(str(feed_obj.url), "podcast")
             for ep in result:
                 episodes.insert(
                     conn,
@@ -656,14 +678,16 @@ class ContentAgent(BaseModel):
                     published_date=ep.published_date.isoformat(),
                     duration=ep.duration,
                     description=ep.description,
+                    canonical_feed_id=cf_id,
                 )
                 episodes_discovered += 1
 
         # Insert discovered articles into DB
-        for result in article_results:
+        for feed_obj, result in zip(article_feeds, article_results):
             if isinstance(result, Exception):
                 logger.error(f"Article feed fetch failed: {result}")
                 continue
+            cf_id = _canonical_id(str(feed_obj.url), "article")
             for art in result:
                 articles.insert(
                     conn,
@@ -674,6 +698,7 @@ class ContentAgent(BaseModel):
                     author=art.author,
                     content=art.content,
                     description=art.description,
+                    canonical_feed_id=cf_id,
                 )
                 articles_discovered += 1
 

@@ -14,15 +14,16 @@ def insert(
     published_date: str,
     duration: Optional[str] = None,
     description: Optional[str] = None,
+    canonical_feed_id: Optional[int] = None,
 ) -> bool:
     """Insert a new episode. Returns True if inserted, False if already exists."""
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO episodes
-           (podcast_feed_id, title, audio_url, published_date, duration, description)
-           VALUES (%s, %s, %s, %s, %s, %s)
+           (podcast_feed_id, title, audio_url, published_date, duration, description, canonical_feed_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (podcast_feed_id, audio_url) DO NOTHING""",
-        (podcast_feed_id, title, audio_url, published_date, duration, description),
+        (podcast_feed_id, title, audio_url, published_date, duration, description, canonical_feed_id),
     )
     inserted = cur.rowcount > 0
     conn.commit()

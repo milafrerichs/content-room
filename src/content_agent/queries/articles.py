@@ -14,15 +14,16 @@ def insert(
     author: Optional[str] = None,
     content: Optional[str] = None,
     description: Optional[str] = None,
+    canonical_feed_id: Optional[int] = None,
 ) -> bool:
     """Insert a new article. Returns True if inserted, False if already exists."""
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO articles
-           (article_feed_id, title, url, published_date, author, content, description)
-           VALUES (%s, %s, %s, %s, %s, %s, %s)
+           (article_feed_id, title, url, published_date, author, content, description, canonical_feed_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (article_feed_id, url) DO NOTHING""",
-        (article_feed_id, title, url, published_date, author, content, description),
+        (article_feed_id, title, url, published_date, author, content, description, canonical_feed_id),
     )
     inserted = cur.rowcount > 0
     conn.commit()
