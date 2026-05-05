@@ -142,6 +142,16 @@ def get_by_id_internal(conn, episode_id: int) -> Optional[dict]:
     )
 
 
+def get_by_id_internal(conn, episode_id: int) -> Optional[dict]:
+    return _fetchone(
+        conn,
+        """SELECT e.*, pf.name as podcast_name FROM episodes e
+           JOIN podcast_feeds pf ON pf.id = e.podcast_feed_id
+           WHERE e.id = %s""",
+        (episode_id,),
+    )
+
+
 def mark_read(conn, episode_id: int) -> bool:
     return _execute(
         conn,
