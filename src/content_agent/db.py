@@ -44,9 +44,90 @@ def init_db(database_url: str):
     cur = conn.cursor()
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            clerk_id TEXT PRIMARY KEY,
+            email TEXT,
+            display_name TEXT,
+            image_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS organizations (
+            clerk_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT,
+            image_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS org_members (
+            org_id TEXT NOT NULL REFERENCES organizations(clerk_id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(clerk_id) ON DELETE CASCADE,
+            role TEXT NOT NULL DEFAULT 'org:member',
+            joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (org_id, user_id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS canonical_feeds (
+            id SERIAL PRIMARY KEY,
+            url TEXT NOT NULL UNIQUE,
+            feed_type TEXT NOT NULL,
+            last_fetched_at TIMESTAMPTZ
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS podcast_feeds (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            category TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            auto_summarize INTEGER NOT NULL DEFAULT 0,
+            owner_type TEXT NOT NULL DEFAULT 'user',
+            owner_id TEXT,
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
+            is_shared BOOLEAN NOT NULL DEFAULT FALSE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS article_feeds (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            category TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            auto_summarize INTEGER NOT NULL DEFAULT 0,
+            owner_type TEXT NOT NULL DEFAULT 'user',
+            owner_id TEXT,
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
+            is_shared BOOLEAN NOT NULL DEFAULT FALSE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS feed_subscriptions (
+            id SERIAL PRIMARY KEY,
+            subscriber_type TEXT NOT NULL,
+            subscriber_id TEXT NOT NULL,
+            feed_type TEXT NOT NULL,
+            feed_id INTEGER NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (subscriber_type, subscriber_id, feed_type, feed_id)
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
             id SERIAL PRIMARY KEY,
-            podcast_name TEXT NOT NULL,
+            podcast_feed_id INTEGER NOT NULL REFERENCES podcast_feeds(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             audio_url TEXT NOT NULL,
             published_date TEXT NOT NULL,
@@ -64,14 +145,15 @@ def init_db(database_url: str):
             read_at TIMESTAMPTZ,
             archived_at TIMESTAMPTZ,
             read_later_at TIMESTAMPTZ,
-            UNIQUE(podcast_name, audio_url)
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
+            UNIQUE(podcast_feed_id, audio_url)
         )
     """)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS articles (
             id SERIAL PRIMARY KEY,
-            feed_name TEXT NOT NULL,
+            article_feed_id INTEGER NOT NULL REFERENCES article_feeds(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             url TEXT NOT NULL,
             published_date TEXT NOT NULL,
@@ -88,29 +170,20 @@ def init_db(database_url: str):
             read_at TIMESTAMPTZ,
             archived_at TIMESTAMPTZ,
             read_later_at TIMESTAMPTZ,
-            UNIQUE(feed_name, url)
+            canonical_feed_id INTEGER REFERENCES canonical_feeds(id),
+            UNIQUE(article_feed_id, url)
         )
     """)
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS podcast_feeds (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            url TEXT NOT NULL,
-            category TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            auto_summarize INTEGER NOT NULL DEFAULT 0
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS article_feeds (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            url TEXT NOT NULL,
-            category TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            auto_summarize INTEGER NOT NULL DEFAULT 0
+        CREATE TABLE IF NOT EXISTS user_item_state (
+            user_id TEXT NOT NULL REFERENCES users(clerk_id) ON DELETE CASCADE,
+            item_kind TEXT NOT NULL,
+            item_id INTEGER NOT NULL,
+            read_at TIMESTAMPTZ,
+            archived_at TIMESTAMPTZ,
+            read_later_at TIMESTAMPTZ,
+            PRIMARY KEY (user_id, item_kind, item_id)
         )
     """)
 
@@ -135,6 +208,22 @@ def init_db(database_url: str):
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS shared_items (
+            id SERIAL PRIMARY KEY,
+            org_id TEXT NOT NULL REFERENCES organizations(clerk_id) ON DELETE CASCADE,
+            shared_by TEXT NOT NULL REFERENCES users(clerk_id) ON DELETE CASCADE,
+            item_kind TEXT NOT NULL,
+            item_id INTEGER NOT NULL,
+            note TEXT,
+            shared_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (org_id, item_kind, item_id)
+        )
+    """)
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_shared_items_org ON shared_items (org_id, shared_at DESC)"
+    )
 
     conn.commit()
     cur.close()

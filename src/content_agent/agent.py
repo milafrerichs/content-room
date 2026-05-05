@@ -133,6 +133,18 @@ class ContentAgent(BaseModel):
         '''
         return self.run_applescript(script)
 
+    def _get_or_create_canonical_feed(self, conn, url: str, feed_type: str) -> int:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO canonical_feeds (url, feed_type) VALUES (%s, %s) ON CONFLICT (url) DO NOTHING",
+            (url, feed_type),
+        )
+        cur.execute("SELECT id FROM canonical_feeds WHERE url = %s", (url,))
+        row = cur.fetchone()
+        cur.close()
+        conn.commit()
+        return row["id"]
+
     async def fetch_rss_feed(self, feed: PodcastFeed) -> List[PodcastEpisode]:
         """Fetch and parse RSS feed to get recent episodes"""
         logger.info(f"Fetching RSS feed: {feed.name}")
@@ -168,6 +180,7 @@ class ContentAgent(BaseModel):
                         published_date=pub_date,
                         duration=entry.get("itunes_duration"),
                         podcast_name=feed.name,
+                        podcast_feed_id=feed.id,
                     )
                     episode_list.append(episode)
 
@@ -431,6 +444,7 @@ class ContentAgent(BaseModel):
                         published_date=pub_date,
                         duration=entry.get("itunes_duration"),
                         podcast_name=feed.name,
+                        podcast_feed_id=feed.id,
                     )
                     episode_list.append(episode)
 
@@ -443,7 +457,7 @@ class ContentAgent(BaseModel):
     async def download_podcast(self, podcast_name: str, count: int) -> List[ProcessingResult]:
         """Download and process N recent episodes from a named podcast, bypassing date filter."""
         conn = db.init_db(self.config.database_url)
-        podcast_feeds = feeds.get_podcasts(conn)
+        podcast_feeds = feeds.get_all_podcasts(conn)
         feed = next(
             (f for f in podcast_feeds if f.name.lower() == podcast_name.lower()),
             None,
@@ -462,7 +476,7 @@ class ContentAgent(BaseModel):
         for ep in episode_list:
             episodes.insert(
                 conn,
-                podcast_name=ep.podcast_name,
+                podcast_feed_id=ep.podcast_feed_id,
                 title=ep.title,
                 audio_url=str(ep.audio_url),
                 published_date=ep.published_date.isoformat(),
@@ -555,6 +569,7 @@ class ContentAgent(BaseModel):
                     content=article_content,
                     description=clean_html(getattr(entry, 'summary', '') or ''),
                     feed_name=feed.name,
+                    article_feed_id=feed.id,
                 )
                 article_list.append(article)
 
@@ -613,11 +628,13 @@ class ContentAgent(BaseModel):
 
         conn = db.init_db(self.config.database_url)
 
-        # Sync feeds from config into DB so new config entries are picked up
+        # Sync feeds from config into DB (legacy CLI path — uses a system owner)
+        from content_agent.web.auth import Owner
+        system_owner = Owner.user("system")
         for pf in self.config.podcast_feeds:
-            feeds.upsert_podcast(conn, pf.name, str(pf.url), auto_summarize=pf.auto_summarize)
+            feeds.upsert_podcast(conn, pf.name, str(pf.url), owner=system_owner, auto_summarize=pf.auto_summarize)
         for af in self.config.article_feeds:
-            feeds.upsert_article(conn, af.name, str(af.url), auto_summarize=af.auto_summarize)
+            feeds.upsert_article(conn, af.name, str(af.url), owner=system_owner, auto_summarize=af.auto_summarize)
         conn.commit()
 
         run_id = runs.start(conn)
@@ -625,8 +642,8 @@ class ContentAgent(BaseModel):
         articles_discovered = 0
 
         # Fetch feeds from DB (includes both config and web-UI-added feeds)
-        podcast_feeds = feeds.get_podcasts(conn)
-        article_feeds = feeds.get_articles(conn)
+        podcast_feeds = feeds.get_all_podcasts(conn)
+        article_feeds = feeds.get_all_articles(conn)
 
         podcast_results = await asyncio.gather(
             *[self.fetch_rss_feed(f) for f in podcast_feeds],
@@ -637,38 +654,51 @@ class ContentAgent(BaseModel):
             return_exceptions=True,
         )
 
+        # Build canonical feed ID cache keyed by (url, feed_type)
+        canonical_cache: dict[tuple, int] = {}
+
+        def _canonical_id(url: str, feed_type: str) -> int:
+            key = (url, feed_type)
+            if key not in canonical_cache:
+                canonical_cache[key] = self._get_or_create_canonical_feed(conn, url, feed_type)
+            return canonical_cache[key]
+
         # Insert discovered episodes into DB
-        for result in podcast_results:
+        for feed_obj, result in zip(podcast_feeds, podcast_results):
             if isinstance(result, Exception):
                 logger.error(f"Feed fetch failed: {result}")
                 continue
+            cf_id = _canonical_id(str(feed_obj.url), "podcast")
             for ep in result:
                 episodes.insert(
                     conn,
-                    podcast_name=ep.podcast_name,
+                    podcast_feed_id=ep.podcast_feed_id,
                     title=ep.title,
                     audio_url=str(ep.audio_url),
                     published_date=ep.published_date.isoformat(),
                     duration=ep.duration,
                     description=ep.description,
+                    canonical_feed_id=cf_id,
                 )
                 episodes_discovered += 1
 
         # Insert discovered articles into DB
-        for result in article_results:
+        for feed_obj, result in zip(article_feeds, article_results):
             if isinstance(result, Exception):
                 logger.error(f"Article feed fetch failed: {result}")
                 continue
+            cf_id = _canonical_id(str(feed_obj.url), "article")
             for art in result:
                 articles.insert(
                     conn,
-                    feed_name=art.feed_name,
+                    article_feed_id=art.article_feed_id,
                     title=art.title,
                     url=str(art.url),
                     published_date=art.published_date.isoformat(),
                     author=art.author,
                     content=art.content,
                     description=art.description,
+                    canonical_feed_id=cf_id,
                 )
                 articles_discovered += 1
 

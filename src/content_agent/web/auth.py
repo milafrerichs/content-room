@@ -38,6 +38,7 @@ class UserContext:
     active_org_id: Optional[str] = None
     org_role: Optional[str] = None
     team_ids: list[str] = field(default_factory=list)
+    all_org_ids: list[str] = field(default_factory=list)
 
     @property
     def owner(self) -> Owner:

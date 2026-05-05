@@ -8,7 +8,7 @@ from content_agent.web.auth import Owner
 def get_podcasts(conn, owner: Owner) -> list[PodcastFeed]:
     rows = _fetchall(
         conn,
-        "SELECT name, url, category, auto_summarize FROM podcast_feeds WHERE owner_type=%s AND owner_id=%s ORDER BY name",
+        "SELECT id, name, url, category, auto_summarize FROM podcast_feeds WHERE owner_type=%s AND owner_id=%s ORDER BY name",
         (owner.type, owner.id),
     )
     return [PodcastFeed.from_row(row) for row in rows]
@@ -17,7 +17,7 @@ def get_podcasts(conn, owner: Owner) -> list[PodcastFeed]:
 def get_articles(conn, owner: Owner) -> list[ArticleFeed]:
     rows = _fetchall(
         conn,
-        "SELECT name, url, category, auto_summarize FROM article_feeds WHERE owner_type=%s AND owner_id=%s ORDER BY name",
+        "SELECT id, name, url, category, auto_summarize FROM article_feeds WHERE owner_type=%s AND owner_id=%s ORDER BY name",
         (owner.type, owner.id),
     )
     return [ArticleFeed.from_row(row) for row in rows]
@@ -114,6 +114,16 @@ def delete_article(conn, name: str, owner: Owner) -> None:
     cur.close()
 
 
+def get_all_podcasts(conn) -> list[PodcastFeed]:
+    rows = _fetchall(conn, "SELECT id, name, url, category, auto_summarize FROM podcast_feeds ORDER BY name")
+    return [PodcastFeed.from_row(row) for row in rows]
+
+
+def get_all_articles(conn) -> list[ArticleFeed]:
+    rows = _fetchall(conn, "SELECT id, name, url, category, auto_summarize FROM article_feeds ORDER BY name")
+    return [ArticleFeed.from_row(row) for row in rows]
+
+
 def get_podcast_by_name(conn, name: str, owner: Owner) -> Optional[dict]:
     return _fetchone(
         conn,
@@ -122,104 +132,166 @@ def get_podcast_by_name(conn, name: str, owner: Owner) -> Optional[dict]:
     )
 
 
-def get_podcasts_with_stats(conn, owner: Owner) -> list[dict]:
+def toggle_shared(conn, feed_type: str, feed_id: int, owner: Owner, is_shared: bool) -> bool:
+    table = "podcast_feeds" if feed_type == "podcast" else "article_feeds"
+    return _execute(
+        conn,
+        f"UPDATE {table} SET is_shared = %s WHERE id = %s AND owner_type = %s AND owner_id = %s",
+        (is_shared, feed_id, owner.type, owner.id),
+    ) > 0
+
+
+def _owner_clause(owner: Owner, all_org_ids: Optional[list], table_alias: str) -> tuple[str, list]:
+    """Build WHERE clause fragment for owner + all org memberships."""
+    if all_org_ids:
+        placeholders = ", ".join(["%s"] * len(all_org_ids))
+        clause = (
+            f"(({table_alias}.owner_type = %s AND {table_alias}.owner_id = %s)"
+            f" OR ({table_alias}.owner_type = 'org' AND {table_alias}.owner_id IN ({placeholders})))"
+        )
+        return clause, [owner.type, owner.id] + list(all_org_ids)
+    return f"{table_alias}.owner_type = %s AND {table_alias}.owner_id = %s", [owner.type, owner.id]
+
+
+def get_podcasts_with_stats(conn, owner: Owner, all_org_ids: Optional[list] = None, active_org_id: Optional[str] = None) -> list[dict]:
+    effective_orgs = all_org_ids or ([active_org_id] if active_org_id else [])
+    owner_clause, owner_params = _owner_clause(owner, effective_orgs or None, "pf")
     return [dict(row) for row in _fetchall(
         conn,
-        """
-        SELECT pf.name, pf.url, pf.category, pf.auto_summarize,
+        f"""
+        SELECT pf.id, pf.name, pf.url, pf.category, pf.auto_summarize,
+               pf.owner_type, pf.owner_id, pf.is_shared,
                MAX(e.published_date) as last_item_date,
                COUNT(e.id) as item_count
         FROM podcast_feeds pf
-        LEFT JOIN episodes e ON pf.name = e.podcast_name
-        WHERE pf.owner_type = %s AND pf.owner_id = %s
+        LEFT JOIN episodes e ON pf.id = e.podcast_feed_id
+        WHERE {owner_clause}
         GROUP BY pf.id
         ORDER BY COALESCE(pf.category, 'zzz'), pf.name
         """,
-        (owner.type, owner.id),
+        owner_params,
     )]
 
 
-def get_articles_with_stats(conn, owner: Owner) -> list[dict]:
+def get_articles_with_stats(conn, owner: Owner, all_org_ids: Optional[list] = None, active_org_id: Optional[str] = None) -> list[dict]:
+    effective_orgs = all_org_ids or ([active_org_id] if active_org_id else [])
+    owner_clause, owner_params = _owner_clause(owner, effective_orgs or None, "af")
     return [dict(row) for row in _fetchall(
         conn,
-        """
-        SELECT af.name, af.url, af.category, af.auto_summarize,
+        f"""
+        SELECT af.id, af.name, af.url, af.category, af.auto_summarize,
+               af.owner_type, af.owner_id, af.is_shared,
                MAX(a.published_date) as last_item_date,
                COUNT(a.id) as item_count
         FROM article_feeds af
-        LEFT JOIN articles a ON af.name = a.feed_name
-        WHERE af.owner_type = %s AND af.owner_id = %s
+        LEFT JOIN articles a ON af.id = a.article_feed_id
+        WHERE {owner_clause}
         GROUP BY af.id
         ORDER BY COALESCE(af.category, 'zzz'), af.name
         """,
-        (owner.type, owner.id),
+        owner_params,
     )]
 
 
-def get_all_sources(conn, owner: Owner) -> list[str]:
+def get_all_sources(conn, owner: Owner, all_org_ids: Optional[list] = None, active_org_id: Optional[str] = None) -> list[str]:
+    effective_orgs = all_org_ids or ([active_org_id] if active_org_id else [])
+    owner_ep, params_ep = _owner_clause(owner, effective_orgs or None, "pf")
+    owner_art, params_art = _owner_clause(owner, effective_orgs or None, "af")
     return [row["name"] for row in _fetchall(
         conn,
-        """
-        SELECT DISTINCT e.podcast_name as name
+        f"""
+        SELECT DISTINCT pf.name as name
         FROM episodes e
-        JOIN podcast_feeds pf ON pf.name = e.podcast_name
-        WHERE pf.owner_type = %s AND pf.owner_id = %s
+        JOIN podcast_feeds pf ON pf.id = e.podcast_feed_id
+        WHERE {owner_ep}
         UNION
-        SELECT DISTINCT a.feed_name as name
+        SELECT DISTINCT af.name as name
         FROM articles a
-        JOIN article_feeds af ON af.name = a.feed_name
-        WHERE af.owner_type = %s AND af.owner_id = %s
+        JOIN article_feeds af ON af.id = a.article_feed_id
+        WHERE {owner_art}
         ORDER BY name
         """,
-        (owner.type, owner.id, owner.type, owner.id),
+        params_ep + params_art,
     )]
 
 
-def get_all_categories(conn, owner: Owner) -> list[str]:
+def get_all_categories(conn, owner: Owner, all_org_ids: Optional[list] = None, active_org_id: Optional[str] = None) -> list[str]:
+    effective_orgs = all_org_ids or ([active_org_id] if active_org_id else [])
+    owner_pf, params_pf = _owner_clause(owner, effective_orgs or None, "pf_cat")
+    owner_af, params_af = _owner_clause(owner, effective_orgs or None, "af_cat")
     return [row["category"] for row in _fetchall(
         conn,
-        """
-        SELECT DISTINCT category FROM podcast_feeds
-        WHERE owner_type = %s AND owner_id = %s AND category IS NOT NULL AND category != ''
+        f"""
+        SELECT DISTINCT category FROM podcast_feeds pf_cat
+        WHERE {owner_pf} AND category IS NOT NULL AND category != ''
         UNION
-        SELECT DISTINCT category FROM article_feeds
-        WHERE owner_type = %s AND owner_id = %s AND category IS NOT NULL AND category != ''
+        SELECT DISTINCT category FROM article_feeds af_cat
+        WHERE {owner_af} AND category IS NOT NULL AND category != ''
         ORDER BY category
         """,
-        (owner.type, owner.id, owner.type, owner.id),
+        params_pf + params_af,
     )]
+
+
+def _visible_feed_ids_subquery(owner: Owner, all_org_ids: Optional[list], feed_type: str) -> tuple[str, list]:
+    """Build a subquery returning feed IDs visible to this user (owned + all orgs + subscribed)."""
+    table = "podcast_feeds" if feed_type == "podcast" else "article_feeds"
+    params: list = [owner.type, owner.id]
+    org_clause = ""
+    if all_org_ids:
+        placeholders = ", ".join(["%s"] * len(all_org_ids))
+        org_clause = f"OR (owner_type = 'org' AND owner_id IN ({placeholders}))"
+        params.extend(all_org_ids)
+    params.extend(["user", owner.id, feed_type])
+    subquery = f"""
+        SELECT id FROM {table}
+        WHERE (owner_type = %s AND owner_id = %s) {org_clause}
+        UNION
+        SELECT feed_id FROM feed_subscriptions
+        WHERE subscriber_type = %s AND subscriber_id = %s AND feed_type = %s
+    """
+    return subquery, params
 
 
 def get_unified(
     conn,
     owner: Owner,
+    user_id: str,
+    all_org_ids: Optional[list] = None,
+    active_org_id: Optional[str] = None,
     source: Optional[str] = None,
     search: Optional[str] = None,
     include_archived: bool = False,
     archived_only: bool = False,
     read_later_only: bool = False,
+    owner_filter: Optional[str] = None,
+    kind_filter: Optional[str] = None,
     limit: int = 200,
 ) -> list[dict]:
-    clauses_ep: list[str] = ["pf.owner_type = %s AND pf.owner_id = %s"]
-    clauses_art: list[str] = ["af.owner_type = %s AND af.owner_id = %s"]
-    params_ep: list = [owner.type, owner.id]
-    params_art: list = [owner.type, owner.id]
+    effective_orgs = all_org_ids or ([active_org_id] if active_org_id else [])
+    ep_sub, ep_sub_params = _visible_feed_ids_subquery(owner, effective_orgs or None, "podcast")
+    art_sub, art_sub_params = _visible_feed_ids_subquery(owner, effective_orgs or None, "article")
+
+    clauses_ep: list[str] = [f"e.podcast_feed_id IN ({ep_sub})"]
+    clauses_art: list[str] = [f"a.article_feed_id IN ({art_sub})"]
+    params_ep: list = list(ep_sub_params)
+    params_art: list = list(art_sub_params)
 
     if archived_only:
-        clauses_ep.append("e.archived_at IS NOT NULL")
-        clauses_art.append("a.archived_at IS NOT NULL")
+        clauses_ep.append("uis_e.archived_at IS NOT NULL")
+        clauses_art.append("uis_a.archived_at IS NOT NULL")
     elif not include_archived:
-        clauses_ep.append("e.archived_at IS NULL")
-        clauses_art.append("a.archived_at IS NULL")
+        clauses_ep.append("uis_e.archived_at IS NULL")
+        clauses_art.append("uis_a.archived_at IS NULL")
 
     if read_later_only:
-        clauses_ep.append("e.read_later_at IS NOT NULL")
-        clauses_art.append("a.read_later_at IS NOT NULL")
+        clauses_ep.append("uis_e.read_later_at IS NOT NULL")
+        clauses_art.append("uis_a.read_later_at IS NOT NULL")
 
     if source:
-        clauses_ep.append("e.podcast_name = %s")
+        clauses_ep.append("pf.name = %s")
         params_ep.append(source)
-        clauses_art.append("a.feed_name = %s")
+        clauses_art.append("af.name = %s")
         params_art.append(source)
 
     if search:
@@ -228,29 +300,54 @@ def get_unified(
         clauses_art.append("(a.title ILIKE %s OR a.description ILIKE %s)")
         params_art.extend([f"%{search}%", f"%{search}%"])
 
+    if owner_filter == "personal":
+        clauses_ep.append("pf.owner_type = 'user'")
+        clauses_art.append("af.owner_type = 'user'")
+    elif owner_filter == "org":
+        clauses_ep.append("pf.owner_type = 'org'")
+        clauses_art.append("af.owner_type = 'org'")
+
     where_ep = " AND ".join(clauses_ep)
     where_art = " AND ".join(clauses_art)
 
-    query = f"""
-        SELECT e.id, 'episode' as kind, e.podcast_name as source, e.title,
-               e.published_date, e.status, e.one_sentence_summary, e.read_at,
-               COALESCE(pf.category, '') as category, e.archived_at,
-               e.read_later_at, e.description
+    include_episodes = kind_filter in (None, "episode")
+    include_articles = kind_filter in (None, "article")
+
+    ep_part = f"""
+        SELECT e.id, 'episode' as kind, pf.name as source, e.title,
+               e.published_date, e.status, e.one_sentence_summary,
+               uis_e.read_at, COALESCE(pf.category, '') as category,
+               uis_e.archived_at, uis_e.read_later_at,
+               e.description, pf.owner_type as source_owner_type
         FROM episodes e
-        LEFT JOIN podcast_feeds pf ON pf.name = e.podcast_name
+        JOIN podcast_feeds pf ON pf.id = e.podcast_feed_id
+        LEFT JOIN user_item_state uis_e
+               ON uis_e.user_id = %s AND uis_e.item_kind = 'episode' AND uis_e.item_id = e.id
         WHERE {where_ep}
-        UNION ALL
-        SELECT a.id, 'article' as kind, a.feed_name as source, a.title,
-               a.published_date, a.status, a.one_sentence_summary, a.read_at,
-               COALESCE(af.category, '') as category, a.archived_at,
-               a.read_later_at, a.description
-        FROM articles a
-        LEFT JOIN article_feeds af ON af.name = a.feed_name
-        WHERE {where_art}
-        ORDER BY published_date DESC
-        LIMIT %s
     """
-    params = params_ep + params_art + [limit]
+    art_part = f"""
+        SELECT a.id, 'article' as kind, af.name as source, a.title,
+               a.published_date, a.status, a.one_sentence_summary,
+               uis_a.read_at, COALESCE(af.category, '') as category,
+               uis_a.archived_at, uis_a.read_later_at,
+               a.description, af.owner_type as source_owner_type
+        FROM articles a
+        JOIN article_feeds af ON af.id = a.article_feed_id
+        LEFT JOIN user_item_state uis_a
+               ON uis_a.user_id = %s AND uis_a.item_kind = 'article' AND uis_a.item_id = a.id
+        WHERE {where_art}
+    """
+
+    if include_episodes and include_articles:
+        query = f"{ep_part} UNION ALL {art_part} ORDER BY published_date DESC LIMIT %s"
+        params = [user_id] + params_ep + [user_id] + params_art + [limit]
+    elif include_episodes:
+        query = f"{ep_part} ORDER BY published_date DESC LIMIT %s"
+        params = [user_id] + params_ep + [limit]
+    else:
+        query = f"{art_part} ORDER BY published_date DESC LIMIT %s"
+        params = [user_id] + params_art + [limit]
+
     cur = conn.cursor()
     cur.execute(query, params)
     rows = [dict(row) for row in cur.fetchall()]
@@ -258,29 +355,35 @@ def get_unified(
     return rows
 
 
-def get_unified_item(conn, kind: str, item_id: int) -> Optional[dict]:
+def get_unified_item(conn, kind: str, item_id: int, user_id: str) -> Optional[dict]:
     cur = conn.cursor()
     if kind == "episode":
         cur.execute(
-            """SELECT e.id, 'episode' as kind, e.podcast_name as source, e.title,
-                      e.published_date, e.status, e.one_sentence_summary, e.read_at,
-                      COALESCE(pf.category, '') as category, e.archived_at,
-                      e.read_later_at, e.description
+            """SELECT e.id, 'episode' as kind, pf.name as source, e.title,
+                      e.published_date, e.status, e.one_sentence_summary,
+                      uis.read_at, COALESCE(pf.category, '') as category,
+                      uis.archived_at, uis.read_later_at,
+                      e.description, pf.owner_type as source_owner_type
                FROM episodes e
-               LEFT JOIN podcast_feeds pf ON pf.name = e.podcast_name
+               JOIN podcast_feeds pf ON pf.id = e.podcast_feed_id
+               LEFT JOIN user_item_state uis
+                      ON uis.user_id = %s AND uis.item_kind = 'episode' AND uis.item_id = e.id
                WHERE e.id = %s""",
-            (item_id,),
+            (user_id, item_id),
         )
     else:
         cur.execute(
-            """SELECT a.id, 'article' as kind, a.feed_name as source, a.title,
-                      a.published_date, a.status, a.one_sentence_summary, a.read_at,
-                      COALESCE(af.category, '') as category, a.archived_at,
-                      a.read_later_at, a.description
+            """SELECT a.id, 'article' as kind, af.name as source, a.title,
+                      a.published_date, a.status, a.one_sentence_summary,
+                      uis.read_at, COALESCE(af.category, '') as category,
+                      uis.archived_at, uis.read_later_at,
+                      a.description, af.owner_type as source_owner_type
                FROM articles a
-               LEFT JOIN article_feeds af ON af.name = a.feed_name
+               JOIN article_feeds af ON af.id = a.article_feed_id
+               LEFT JOIN user_item_state uis
+                      ON uis.user_id = %s AND uis.item_kind = 'article' AND uis.item_id = a.id
                WHERE a.id = %s""",
-            (item_id,),
+            (user_id, item_id),
         )
     row = cur.fetchone()
     cur.close()

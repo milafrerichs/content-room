@@ -83,7 +83,7 @@ def list_episodes(
     request: Request,
     user: CurrentUser,
     status: Optional[str] = None,
-    podcast_name: Optional[str] = None,
+    podcast_feed_id: Optional[int] = None,
     limit: int = 100,
 ):
     conn = get_conn(request)
@@ -91,15 +91,17 @@ def list_episodes(
         clauses = []
         params: list = []
         if status:
-            clauses.append("status = %s")
+            clauses.append("e.status = %s")
             params.append(status)
-        if podcast_name:
-            clauses.append("podcast_name = %s")
-            params.append(podcast_name)
+        if podcast_feed_id:
+            clauses.append("e.podcast_feed_id = %s")
+            params.append(podcast_feed_id)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = _fetchall(
             conn,
-            f"SELECT * FROM episodes{where} ORDER BY published_date DESC LIMIT %s",
+            f"""SELECT e.*, pf.name as podcast_name FROM episodes e
+                JOIN podcast_feeds pf ON pf.id = e.podcast_feed_id{where}
+                ORDER BY e.published_date DESC LIMIT %s""",
             params + [limit],
         )
         return [_episode_dict(r) for r in rows]
@@ -236,7 +238,7 @@ def list_articles(
     request: Request,
     user: CurrentUser,
     status: Optional[str] = None,
-    feed_name: Optional[str] = None,
+    article_feed_id: Optional[int] = None,
     limit: int = 100,
 ):
     conn = get_conn(request)
@@ -244,15 +246,17 @@ def list_articles(
         clauses = []
         params: list = []
         if status:
-            clauses.append("status = %s")
+            clauses.append("a.status = %s")
             params.append(status)
-        if feed_name:
-            clauses.append("feed_name = %s")
-            params.append(feed_name)
+        if article_feed_id:
+            clauses.append("a.article_feed_id = %s")
+            params.append(article_feed_id)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = _fetchall(
             conn,
-            f"SELECT * FROM articles{where} ORDER BY published_date DESC LIMIT %s",
+            f"""SELECT a.*, af.name as feed_name FROM articles a
+                JOIN article_feeds af ON af.id = a.article_feed_id{where}
+                ORDER BY a.published_date DESC LIMIT %s""",
             params + [limit],
         )
         return [_article_dict(r) for r in rows]

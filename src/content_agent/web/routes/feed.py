@@ -10,8 +10,11 @@ import feedparser
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
+from fastapi import HTTPException
+
 from content_agent.feed_discovery import discover_feed
-from content_agent.queries import articles, episodes, feeds
+from content_agent.queries import articles, episodes, feeds, item_state, shared_items, subscriptions
+from content_agent.web.auth import Owner
 from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_download_single_episode
 
@@ -61,9 +64,9 @@ def _get_owned_item(conn, kind: str, item_id: int, owner) -> Optional[dict]:
     return articles.get_by_id(conn, item_id, owner)
 
 
-def _feeds_context(conn, owner):
-    podcast_feed_list = feeds.get_podcasts_with_stats(conn, owner)
-    article_feed_list = feeds.get_articles_with_stats(conn, owner)
+def _feeds_context(conn, owner, all_org_ids=None, active_org_id=None):
+    podcast_feed_list = feeds.get_podcasts_with_stats(conn, owner, all_org_ids=all_org_ids, active_org_id=active_org_id)
+    article_feed_list = feeds.get_articles_with_stats(conn, owner, all_org_ids=all_org_ids, active_org_id=active_org_id)
 
     all_feeds = [
         {**f, "type": "podcast"} for f in podcast_feed_list
@@ -87,12 +90,19 @@ def feed_page(
     search: Optional[str] = None,
     view: Optional[str] = None,
     category: Optional[str] = None,
+    owner: Optional[str] = None,
+    kind: Optional[str] = None,
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner)
-        categories = feeds.get_all_categories(conn, user.owner)
-        items = feeds.get_unified(conn, user.owner, source=source or None, search=search or None)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
+        categories = feeds.get_all_categories(conn, user.owner, all_org_ids=user.all_org_ids)
+        items = feeds.get_unified(
+            conn, user.owner, user_id=user.user_id,
+            all_org_ids=user.all_org_ids,
+            source=source or None, search=search or None,
+            owner_filter=owner or None, kind_filter=kind or None,
+        )
     finally:
         conn.close()
 
@@ -128,7 +138,7 @@ def feed_page(
             "categories": categories,
             "by_category": by_category,
             "sorted_categories": sorted_categories,
-            "filters": {"source": source, "search": search, "view": active_view, "category": category},
+            "filters": {"source": source, "search": search, "view": active_view, "category": category, "owner": owner, "kind": kind},
         },
     )
 
@@ -142,9 +152,9 @@ def archive_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
         items = feeds.get_unified(
-            conn, user.owner,
+            conn, user.owner, user_id=user.user_id, all_org_ids=user.all_org_ids,
             source=source or None, search=search or None, archived_only=True,
         )
     finally:
@@ -177,10 +187,7 @@ def archive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.archive(conn, item_id)
-        else:
-            articles.archive(conn, item_id)
+        item_state.archive(conn, user.user_id, kind, item_id)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -192,23 +199,20 @@ def unarchive_item(request: Request, kind: str, item_id: int, user: CurrentUser)
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.unarchive(conn, item_id)
-        else:
-            articles.unarchive(conn, item_id)
+        item_state.unarchive(conn, user.user_id, kind, item_id)
     finally:
         conn.close()
     return HTMLResponse("")
 
 
-def _render_feed_item(request: Request, kind: str, item_id: int, item: dict) -> Response:
+def _render_feed_item(request: Request, kind: str, item_id: int, item: dict, user=None) -> Response:
     templates = request.app.state.templates
     hx_target = request.headers.get("HX-Target", "")
     if hx_target.startswith("card-"):
         template = "feed/_mobile_card.html"
     else:
         template = "feed/_feed_item.html"
-    return templates.TemplateResponse(template, {"request": request, "item": item})
+    return templates.TemplateResponse(template, {"request": request, "item": item, "user": user})
 
 
 @router.post("/feed/{kind}/{item_id}/read-later", response_class=HTMLResponse)
@@ -217,16 +221,13 @@ def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.mark_read_later(conn, item_id)
-        else:
-            articles.mark_read_later(conn, item_id)
-        item = feeds.get_unified_item(conn, kind, item_id)
+        item_state.mark_read_later(conn, user.user_id, kind, item_id)
+        item = feeds.get_unified_item(conn, kind, item_id, user.user_id)
     finally:
         conn.close()
     if not item:
         return HTMLResponse("")
-    return _render_feed_item(request, kind, item_id, item)
+    return _render_feed_item(request, kind, item_id, item, user=user)
 
 
 @router.post("/feed/{kind}/{item_id}/unread-later", response_class=HTMLResponse)
@@ -235,16 +236,13 @@ def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUs
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.unmark_read_later(conn, item_id)
-        else:
-            articles.unmark_read_later(conn, item_id)
-        item = feeds.get_unified_item(conn, kind, item_id)
+        item_state.unmark_read_later(conn, user.user_id, kind, item_id)
+        item = feeds.get_unified_item(conn, kind, item_id, user.user_id)
     finally:
         conn.close()
     if not item:
         return HTMLResponse("")
-    return _render_feed_item(request, kind, item_id, item)
+    return _render_feed_item(request, kind, item_id, item, user=user)
 
 
 @router.delete("/feed/{kind}/{item_id}", response_class=HTMLResponse)
@@ -271,9 +269,9 @@ def read_later_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
         items = feeds.get_unified(
-            conn, user.owner,
+            conn, user.owner, user_id=user.user_id, all_org_ids=user.all_org_ids,
             source=source or None, search=search or None, read_later_only=True,
         )
     finally:
@@ -310,9 +308,9 @@ def mobile_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
         items = feeds.get_unified(
-            conn, user.owner,
+            conn, user.owner, user_id=user.user_id, all_org_ids=user.all_org_ids,
             source=source or None,
             search=search or None,
             read_later_only=read_later == "1",
@@ -333,11 +331,22 @@ def mobile_page(
     )
 
 
+@router.post("/context/switch-org")
+def switch_org(request: Request, user: CurrentUser, org_id: str = Form("")):
+    from fastapi.responses import RedirectResponse
+    response = RedirectResponse(url="/feed", status_code=303)
+    if org_id:
+        response.set_cookie("active_org_id", org_id, httponly=True, samesite="lax")
+    else:
+        response.delete_cookie("active_org_id")
+    return response
+
+
 @router.get("/feeds", response_class=HTMLResponse)
 def feeds_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -358,7 +367,7 @@ def sync_all_feeds(request: Request, user: CurrentUser):
         for af in config.article_feeds:
             feeds.upsert_article(conn, af.name, str(af.url), user.owner, auto_summarize=af.auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -377,12 +386,17 @@ def create_podcast_feed(
     url: str = Form(...),
     category: str = Form(""),
     auto_summarize: bool = Form(False),
+    owner_type: str = Form("user"),
 ):
+    if owner_type == "org" and user.active_org_id and user.org_role == "org:admin":
+        owner = Owner.org(user.active_org_id)
+    else:
+        owner = user.owner
     conn = get_conn(request)
     try:
-        feeds.upsert_podcast(conn, name, url, user.owner, category=category or None, auto_summarize=auto_summarize)
+        feeds.upsert_podcast(conn, name, url, owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -401,6 +415,7 @@ def create_article_feed(
     url: str = Form(...),
     category: str = Form(""),
     auto_summarize: bool = Form(False),
+    owner_type: str = Form("user"),
 ):
     templates = request.app.state.templates
 
@@ -413,12 +428,16 @@ def create_article_feed(
             status_code=422,
         )
 
+    if owner_type == "org" and user.active_org_id and user.org_role == "org:admin":
+        owner = Owner.org(user.active_org_id)
+    else:
+        owner = user.owner
     feed_name = name.strip() or feed_title or url
     conn = get_conn(request)
     try:
-        feeds.upsert_article(conn, feed_name, feed_url, user.owner, category=category or None, auto_summarize=auto_summarize)
+        feeds.upsert_article(conn, feed_name, feed_url, owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -439,7 +458,7 @@ def update_podcast_category(
     try:
         feeds.update_podcast_category(conn, feed_name, user.owner, category.strip())
         conn.commit()
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -460,7 +479,7 @@ def toggle_podcast_auto_summarize(
     conn = get_conn(request)
     try:
         feeds.update_podcast_auto_summarize(conn, feed_name, user.owner, auto_summarize)
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -481,7 +500,7 @@ def toggle_article_auto_summarize(
     conn = get_conn(request)
     try:
         feeds.update_article_auto_summarize(conn, feed_name, user.owner, auto_summarize)
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -503,7 +522,7 @@ def update_article_category(
     try:
         feeds.update_article_category(conn, feed_name, user.owner, category.strip())
         conn.commit()
-        ctx = _feeds_context(conn, user.owner)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -552,7 +571,7 @@ def podcast_feed_detail(request: Request, feed_name: str, user: CurrentUser):
         feed_url = feed_row["url"]
         rss_episodes = _fetch_rss_episodes(feed_url)
 
-        db_episodes = episodes.get_by_podcast(conn, feed_name)
+        db_episodes = episodes.get_by_podcast(conn, feed_row["id"])
 
         merged = []
         for ep in rss_episodes:
@@ -596,9 +615,12 @@ def download_single_episode(
     config = request.app.state.config
     conn = get_conn(request)
     try:
+        feed_row = feeds.get_podcast_by_name(conn, feed_name, user.owner)
+        if feed_row is None:
+            return HTMLResponse("Feed not found", status_code=404)
         episodes.insert(
             conn,
-            podcast_name=feed_name,
+            podcast_feed_id=feed_row["id"],
             title=title,
             audio_url=audio_url,
             published_date=published_date,
@@ -607,8 +629,8 @@ def download_single_episode(
         )
         cur = conn.cursor()
         cur.execute(
-            "SELECT id FROM episodes WHERE podcast_name = %s AND audio_url = %s",
-            (feed_name, audio_url),
+            "SELECT id FROM episodes WHERE podcast_feed_id = %s AND audio_url = %s",
+            (feed_row["id"], audio_url),
         )
         row = cur.fetchone()
         cur.close()
@@ -657,3 +679,154 @@ def delete_article_feed(request: Request, feed_name: str, user: CurrentUser):
     finally:
         conn.close()
     return HTMLResponse("")
+
+
+@router.get("/feeds/discover", response_class=HTMLResponse)
+def discover_feeds_page(request: Request, user: CurrentUser):
+    if not user.active_org_id:
+        return HTMLResponse("Switch to an org context to discover shared feeds.", status_code=403)
+
+    conn = get_conn(request)
+    try:
+        discoverable = subscriptions.get_discoverable_feeds(conn, user.active_org_id)
+        my_sub_podcast_ids = subscriptions.get_subscriber_feed_ids(conn, "user", user.user_id, "podcast")
+        my_sub_article_ids = subscriptions.get_subscriber_feed_ids(conn, "user", user.user_id, "article")
+    finally:
+        conn.close()
+
+    for feed in discoverable:
+        sub_ids = my_sub_podcast_ids if feed["feed_type"] == "podcast" else my_sub_article_ids
+        feed["subscribed"] = feed["feed_id"] in sub_ids
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/discover.html",
+        {"request": request, "user": user, "feeds": discoverable},
+    )
+
+
+@router.post("/feeds/{feed_type}/{feed_id}/subscribe", response_class=HTMLResponse)
+def subscribe_feed(request: Request, feed_type: str, feed_id: int, user: CurrentUser):
+    conn = get_conn(request)
+    try:
+        subscriptions.subscribe(conn, "user", user.user_id, feed_type, feed_id)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button hx-delete="/feeds/{feed_type}/{feed_id}/unsubscribe" '
+        f'hx-target="closest div" hx-swap="outerHTML" '
+        f'class="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 '
+        f'text-xs rounded-lg hover:bg-emerald-100 transition-colors mono">Unsubscribe</button>'
+    )
+
+
+@router.delete("/feeds/{feed_type}/{feed_id}/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_feed(request: Request, feed_type: str, feed_id: int, user: CurrentUser):
+    conn = get_conn(request)
+    try:
+        subscriptions.unsubscribe(conn, "user", user.user_id, feed_type, feed_id)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button hx-post="/feeds/{feed_type}/{feed_id}/subscribe" '
+        f'hx-target="closest div" hx-swap="outerHTML" '
+        f'class="px-3 py-1.5 bg-white text-slate-600 border border-surface-200 '
+        f'text-xs rounded-lg hover:border-accent hover:text-accent transition-colors mono">Subscribe</button>'
+    )
+
+
+@router.post("/feeds/{feed_type}/{feed_id}/share", response_class=HTMLResponse)
+def toggle_share_feed(request: Request, feed_type: str, feed_id: int, user: CurrentUser):
+    if user.org_role != "org:admin":
+        raise HTTPException(status_code=403, detail="Only org admins can share feeds")
+
+    conn = get_conn(request)
+    try:
+        table = "podcast_feeds" if feed_type == "podcast" else "article_feeds"
+        cur = conn.cursor()
+        cur.execute(f"SELECT is_shared FROM {table} WHERE id = %s AND owner_type = %s AND owner_id = %s",
+                    (feed_id, user.owner.type, user.owner.id))
+        row = cur.fetchone()
+        cur.close()
+        if row is None:
+            raise HTTPException(status_code=404)
+        new_shared = not row["is_shared"]
+        feeds.toggle_shared(conn, feed_type, feed_id, user.owner, new_shared)
+        conn.commit()
+    finally:
+        conn.close()
+
+    if new_shared:
+        return HTMLResponse(
+            f'<button hx-post="/feeds/{feed_type}/{feed_id}/share" hx-target="this" hx-swap="outerHTML" '
+            f'class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs '
+            f'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors">Shared</button>'
+        )
+    return HTMLResponse(
+        f'<button hx-post="/feeds/{feed_type}/{feed_id}/share" hx-target="this" hx-swap="outerHTML" '
+        f'class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs '
+        f'bg-surface-100 text-slate-400 border border-surface-200 hover:bg-surface-200 transition-colors">Share</button>'
+    )
+
+
+@router.post("/feed/{kind}/{item_id}/share-to-org", response_class=HTMLResponse)
+def share_item_to_org(
+    request: Request,
+    kind: str,
+    item_id: int,
+    user: CurrentUser,
+    note: str = Form(""),
+):
+    if not user.active_org_id:
+        return HTMLResponse("", status_code=403)
+    conn = get_conn(request)
+    try:
+        shared_items.share_item(conn, user.active_org_id, user.user_id, kind, item_id, note or None)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button id="share-btn-{kind}-{item_id}" '
+        f'hx-delete="/feed/{kind}/{item_id}/share-to-org" hx-target="this" hx-swap="outerHTML" '
+        f'class="p-1 text-purple-500 hover:text-purple-700 hover:bg-purple-50 rounded transition-colors" '
+        f'title="Shared to Org (click to unshare)">'
+        f'<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">'
+        f'<path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>'
+        f'</svg></button>'
+    )
+
+
+@router.delete("/feed/{kind}/{item_id}/share-to-org", response_class=HTMLResponse)
+def unshare_item_from_org(request: Request, kind: str, item_id: int, user: CurrentUser):
+    if not user.active_org_id:
+        return HTMLResponse("", status_code=403)
+    conn = get_conn(request)
+    try:
+        shared_items.unshare_item(conn, user.active_org_id, kind, item_id)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f'<button id="share-btn-{kind}-{item_id}" '
+        f'hx-post="/feed/{kind}/{item_id}/share-to-org" hx-target="this" hx-swap="outerHTML" '
+        f'class="p-1 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded transition-colors" '
+        f'title="Share to Org">'
+        f'<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" '
+        f'd="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>'
+        f'</svg></button>'
+    )
+
+
+@router.get("/org/shared", response_class=HTMLResponse)
+def org_shared_page(request: Request, user: CurrentUser):
+    if not user.active_org_id:
+        return HTMLResponse("Switch to an org context to view shared items.", status_code=403)
+    conn = get_conn(request)
+    try:
+        items = shared_items.get_shared_items(conn, user.active_org_id)
+    finally:
+        conn.close()
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "feed/org_shared.html",
+        {"request": request, "user": user, "items": items},
+    )

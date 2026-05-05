@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
-from content_agent.queries import articles, feeds
+from content_agent.queries import articles, feeds, item_state
 from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_rerun_article
 
@@ -16,7 +16,7 @@ PAGE_SIZE = 24
 def articles_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
-        feed_names = articles.get_feed_names(conn)
+        article_feeds = articles.get_feed_names(conn)
         article_list = articles.get_all(conn, limit=PAGE_SIZE, offset=0)
         total = articles.get_count(conn)
     finally:
@@ -29,7 +29,7 @@ def articles_page(request: Request, user: CurrentUser):
             "request": request,
             "user": user,
             "articles": article_list,
-            "feed_names": feed_names,
+            "article_feeds": article_feeds,
             "total": total,
             "page": 1,
             "page_size": PAGE_SIZE,
@@ -42,7 +42,7 @@ def articles_page(request: Request, user: CurrentUser):
 def articles_search(
     request: Request,
     user: CurrentUser,
-    feed_name: Optional[str] = None,
+    article_feed_id: Optional[int] = None,
     status: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -54,7 +54,7 @@ def articles_search(
     try:
         article_list = articles.get_all(
             conn,
-            feed_name=feed_name or None,
+            article_feed_id=article_feed_id,
             status=status or None,
             date_from=date_from or None,
             date_to=date_to or None,
@@ -64,7 +64,7 @@ def articles_search(
         )
         total = articles.get_count(
             conn,
-            feed_name=feed_name or None,
+            article_feed_id=article_feed_id,
             status=status or None,
             date_from=date_from or None,
             date_to=date_to or None,
@@ -74,7 +74,7 @@ def articles_search(
         conn.close()
 
     filters = {
-        "feed_name": feed_name,
+        "article_feed_id": article_feed_id,
         "status": status,
         "date_from": date_from,
         "date_to": date_to,
@@ -135,7 +135,7 @@ def mark_read(request: Request, article_id: int, user: CurrentUser):
     try:
         if articles.get_by_id(conn, article_id, user.owner) is None:
             return Response(status_code=404)
-        articles.mark_read(conn, article_id)
+        item_state.mark_read(conn, user.user_id, "article", article_id)
     finally:
         conn.close()
     return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})

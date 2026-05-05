@@ -32,10 +32,10 @@
       <!-- Feed name -->
       <div>
         <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">FEED</label>
-        <select name="feed_name" class="form-input w-full rounded-lg px-3 py-2 text-sm">
+        <select name="article_feed_id" class="form-input w-full rounded-lg px-3 py-2 text-sm">
           <option value="">All feeds</option>
-          {% for name in feed_names %}
-          <option value="{{ name }}" {% if filters.feed_name == name %}selected{% endif %}>{{ name }}</option>
+          {% for af in article_feeds %}
+          <option value="{{ af['article_feed_id'] }}" {% if filters.article_feed_id == af['article_feed_id'] %}selected{% endif %}>{{ af['feed_name'] }}</option>
           {% endfor %}
         </select>
       </div>

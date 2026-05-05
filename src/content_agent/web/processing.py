@@ -19,7 +19,7 @@ def _connect(config: AgentConfig):
 async def rerun_episode(episode_id: int, config: AgentConfig) -> None:
     conn = _connect(config)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id_internal(conn, episode_id)
         if row is None:
             logger.error(f"Episode {episode_id} not found for rerun")
             return
@@ -33,6 +33,7 @@ async def rerun_episode(episode_id: int, config: AgentConfig) -> None:
             published_date=row["published_date"],
             duration=row["duration"],
             podcast_name=row["podcast_name"],
+            podcast_feed_id=row["podcast_feed_id"],
             local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
             transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
             summary_path=Path(row["summary_path"]) if row["summary_path"] else None,
@@ -77,7 +78,7 @@ def run_rerun_episode(episode_id: int, config: AgentConfig) -> None:
 async def rerun_article(article_id: int, config: AgentConfig) -> None:
     conn = _connect(config)
     try:
-        row = articles.get_by_id(conn, article_id)
+        row = articles.get_by_id_internal(conn, article_id)
         if row is None:
             logger.error(f"Article {article_id} not found for rerun")
             return
@@ -91,6 +92,7 @@ async def rerun_article(article_id: int, config: AgentConfig) -> None:
             content=row["content"],
             description=row["description"],
             feed_name=row["feed_name"],
+            article_feed_id=row["article_feed_id"],
         )
         await agent.process_article(article, config.database_url, article_id)
 
@@ -111,7 +113,7 @@ def run_rerun_article(article_id: int, config: AgentConfig) -> None:
 async def download_single_episode(episode_id: int, config: AgentConfig) -> None:
     conn = _connect(config)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id_internal(conn, episode_id)
         if row is None:
             logger.error(f"Episode {episode_id} not found for download")
             return
@@ -123,6 +125,7 @@ async def download_single_episode(episode_id: int, config: AgentConfig) -> None:
             published_date=row["published_date"],
             duration=row["duration"],
             podcast_name=row["podcast_name"],
+            podcast_feed_id=row["podcast_feed_id"],
             local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
             transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
             summary_path=Path(row["summary_path"]) if row["summary_path"] else None,
@@ -148,7 +151,7 @@ def run_download_single_episode(episode_id: int, config: AgentConfig) -> None:
 async def transcribe_episode(episode_id: int, config: AgentConfig) -> None:
     conn = _connect(config)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id_internal(conn, episode_id)
         if row is None:
             logger.error(f"Episode {episode_id} not found for transcription")
             return
@@ -160,6 +163,7 @@ async def transcribe_episode(episode_id: int, config: AgentConfig) -> None:
             published_date=row["published_date"],
             duration=row["duration"],
             podcast_name=row["podcast_name"],
+            podcast_feed_id=row["podcast_feed_id"],
             local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
             transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
             summary_path=Path(row["summary_path"]) if row["summary_path"] else None,
@@ -185,7 +189,7 @@ def run_transcribe_episode(episode_id: int, config: AgentConfig) -> None:
 async def summarize_episode_only(episode_id: int, config: AgentConfig) -> None:
     conn = _connect(config)
     try:
-        row = episodes.get_by_id(conn, episode_id)
+        row = episodes.get_by_id_internal(conn, episode_id)
         if row is None:
             logger.error(f"Episode {episode_id} not found for summarization")
             return
@@ -197,6 +201,7 @@ async def summarize_episode_only(episode_id: int, config: AgentConfig) -> None:
             published_date=row["published_date"],
             duration=row["duration"],
             podcast_name=row["podcast_name"],
+            podcast_feed_id=row["podcast_feed_id"],
             local_audio_path=Path(row["local_audio_path"]) if row["local_audio_path"] else None,
             transcript_path=Path(row["transcript_path"]) if row["transcript_path"] else None,
             summary_path=Path(row["summary_path"]) if row["summary_path"] else None,

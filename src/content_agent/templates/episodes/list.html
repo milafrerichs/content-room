@@ -23,10 +23,10 @@
       <!-- Podcast name -->
       <div>
         <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">PODCAST</label>
-        <select name="podcast_name" class="form-input w-full rounded-lg px-3 py-2 text-sm">
+        <select name="podcast_feed_id" class="form-input w-full rounded-lg px-3 py-2 text-sm">
           <option value="">All podcasts</option>
-          {% for name in podcast_names %}
-          <option value="{{ name }}" {% if filters.podcast_name == name %}selected{% endif %}>{{ name }}</option>
+          {% for pf in podcast_feeds %}
+          <option value="{{ pf['podcast_feed_id'] }}" {% if filters.podcast_feed_id == pf['podcast_feed_id'] %}selected{% endif %}>{{ pf['podcast_name'] }}</option>
           {% endfor %}
         </select>
       </div>
