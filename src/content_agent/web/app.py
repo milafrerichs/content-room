@@ -38,7 +38,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
 
 def create_app(config: AgentConfig) -> FastAPI:
     # Import routes here to avoid circular imports at module level
-    from content_agent.web.routes import api, articles, dashboard, digest, episodes, feed, podcasts, runs, settings
+    from content_agent.web.routes import api, articles, dashboard, digest, episodes, feed, podcasts, runs, settings, webhooks
 
     app = FastAPI(title="Podcast Agent Dashboard")
 
@@ -109,6 +109,7 @@ def create_app(config: AgentConfig) -> FastAPI:
     app.include_router(articles.router)
     app.include_router(runs.router)
     app.include_router(settings.router)
+    app.include_router(webhooks.router)
 
     @app.on_event("startup")
     async def startup():

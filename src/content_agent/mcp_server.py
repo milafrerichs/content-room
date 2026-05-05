@@ -155,7 +155,7 @@ def get_summary(episode_id: int) -> str:
         Complete markdown summary, or error message if not found
     """
     conn = _get_conn()
-    row = episodes.get_by_id(conn, episode_id)
+    row = episodes.get_by_id_internal(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -177,7 +177,7 @@ def get_transcript(episode_id: int) -> str:
         Complete transcript text, or error message if not found
     """
     conn = _get_conn()
-    row = episodes.get_by_id(conn, episode_id)
+    row = episodes.get_by_id_internal(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -218,7 +218,7 @@ async def resummarize(episode_id: int, instructions: str) -> str:
         New summary based on transcript and custom instructions
     """
     conn = _get_conn()
-    row = episodes.get_by_id(conn, episode_id)
+    row = episodes.get_by_id_internal(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -375,7 +375,7 @@ def get_article_summary(article_id: int) -> str:
         Complete markdown summary, or error message if not found
     """
     conn = _get_conn()
-    row = articles.get_by_id(conn, article_id)
+    row = articles.get_by_id_internal(conn, article_id)
     if not row:
         return f"Article {article_id} not found"
 
@@ -397,7 +397,7 @@ def get_article_content(article_id: int) -> str:
         Original article content, or error message if not found
     """
     conn = _get_conn()
-    row = articles.get_by_id(conn, article_id)
+    row = articles.get_by_id_internal(conn, article_id)
     if not row:
         return f"Article {article_id} not found"
 
@@ -503,7 +503,7 @@ async def resummarize_article(article_id: int, instructions: str) -> str:
         New summary based on article content and custom instructions
     """
     conn = _get_conn()
-    row = articles.get_by_id(conn, article_id)
+    row = articles.get_by_id_internal(conn, article_id)
     if not row:
         return f"Article {article_id} not found"
 
@@ -537,7 +537,7 @@ async def get_sponsors(episode_id: int) -> str:
         Markdown formatted list of sponsors, or message if none found
     """
     conn = _get_conn()
-    row = episodes.get_by_id(conn, episode_id)
+    row = episodes.get_by_id_internal(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -566,7 +566,7 @@ async def get_micro_summary(episode_id: int) -> str:
         Markdown formatted micro summary
     """
     conn = _get_conn()
-    row = episodes.get_by_id(conn, episode_id)
+    row = episodes.get_by_id_internal(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -593,7 +593,7 @@ async def get_insights(episode_id: int) -> str:
         Markdown formatted list of insights
     """
     conn = _get_conn()
-    row = episodes.get_by_id(conn, episode_id)
+    row = episodes.get_by_id_internal(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 
@@ -622,7 +622,7 @@ async def get_recommendations(episode_id: int) -> str:
         Markdown formatted list of recommendations
     """
     conn = _get_conn()
-    row = episodes.get_by_id(conn, episode_id)
+    row = episodes.get_by_id_internal(conn, episode_id)
     if not row:
         return f"Episode {episode_id} not found"
 

@@ -7,7 +7,7 @@ from .episodes import PROCESSING_STATUSES
 
 def insert(
     conn,
-    feed_name: str,
+    article_feed_id: int,
     title: str,
     url: str,
     published_date: str,
@@ -19,10 +19,10 @@ def insert(
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO articles
-           (feed_name, title, url, published_date, author, content, description)
+           (article_feed_id, title, url, published_date, author, content, description)
            VALUES (%s, %s, %s, %s, %s, %s, %s)
-           ON CONFLICT DO NOTHING""",
-        (feed_name, title, url, published_date, author, content, description),
+           ON CONFLICT (article_feed_id, url) DO NOTHING""",
+        (article_feed_id, title, url, published_date, author, content, description),
     )
     inserted = cur.rowcount > 0
     conn.commit()
@@ -68,16 +68,24 @@ def update_one_sentence(conn, article_id: int, summary: str) -> None:
 
 
 def get_pending(conn) -> list:
-    return _fetchall(conn, "SELECT * FROM articles WHERE status = 'discovered' ORDER BY id")
+    return _fetchall(
+        conn,
+        """SELECT a.*, af.name as feed_name FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
+           WHERE a.status = 'discovered'
+           ORDER BY a.id""",
+    )
 
 
 def get_unread(conn, limit: int = 20) -> list:
     return _fetchall(
         conn,
-        """SELECT id, feed_name, title, url, published_date, author, summary_path
-           FROM articles
-           WHERE status = 'summarized' AND read_at IS NULL
-           ORDER BY published_date DESC
+        """SELECT a.id, af.name as feed_name, a.title, a.url, a.published_date,
+                  a.author, a.summary_path
+           FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
+           WHERE a.status = 'summarized' AND a.read_at IS NULL
+           ORDER BY a.published_date DESC
            LIMIT %s""",
         (limit,),
     )
@@ -87,10 +95,20 @@ def get_by_id(conn, article_id: int, owner: Owner) -> Optional[dict]:
     """Fetch an article, returning None if it doesn't exist or is not owned by owner."""
     return _fetchone(
         conn,
-        """SELECT a.* FROM articles a
-           JOIN article_feeds af ON af.name = a.feed_name
+        """SELECT a.*, af.name as feed_name FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
            WHERE a.id = %s AND af.owner_type = %s AND af.owner_id = %s""",
         (article_id, owner.type, owner.id),
+    )
+
+
+def get_by_id_internal(conn, article_id: int) -> Optional[dict]:
+    return _fetchone(
+        conn,
+        """SELECT a.*, af.name as feed_name FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
+           WHERE a.id = %s""",
+        (article_id,),
     )
 
 
@@ -169,12 +187,13 @@ def get_stats(conn) -> list:
     return _fetchall(
         conn,
         """SELECT
-               feed_name,
+               af.name as feed_name,
                COUNT(*) as total_articles,
-               SUM(CASE WHEN status = 'summarized' AND read_at IS NULL THEN 1 ELSE 0 END) as unread_count
-           FROM articles
-           GROUP BY feed_name
-           ORDER BY feed_name""",
+               SUM(CASE WHEN a.status = 'summarized' AND a.read_at IS NULL THEN 1 ELSE 0 END) as unread_count
+           FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
+           GROUP BY af.id, af.name
+           ORDER BY af.name""",
     )
 
 
@@ -182,11 +201,13 @@ def search(conn, query: str) -> list:
     search_pattern = f"%{query}%"
     return _fetchall(
         conn,
-        """SELECT id, feed_name, title, url, published_date, author, summary_path, content
-           FROM articles
-           WHERE status = 'summarized'
-             AND (title LIKE %s OR description LIKE %s OR content LIKE %s)
-           ORDER BY published_date DESC
+        """SELECT a.id, af.name as feed_name, a.title, a.url, a.published_date,
+                  a.author, a.summary_path, a.content
+           FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
+           WHERE a.status = 'summarized'
+             AND (a.title LIKE %s OR a.description LIKE %s OR a.content LIKE %s)
+           ORDER BY a.published_date DESC
            LIMIT 50""",
         (search_pattern, search_pattern, search_pattern),
     )
@@ -194,7 +215,7 @@ def search(conn, query: str) -> list:
 
 def get_all(
     conn,
-    feed_name: Optional[str] = None,
+    article_feed_id: Optional[int] = None,
     status: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -202,8 +223,10 @@ def get_all(
     limit: int = 50,
     offset: int = 0,
 ) -> list:
-    where, params = _filters(feed_name, status, date_from, date_to, search)
-    query = f"SELECT * FROM articles{where} ORDER BY published_date DESC LIMIT %s OFFSET %s"
+    where, params = _filters(article_feed_id, status, date_from, date_to, search)
+    query = f"""SELECT a.*, af.name as feed_name FROM articles a
+                JOIN article_feeds af ON af.id = a.article_feed_id{where}
+                ORDER BY a.published_date DESC LIMIT %s OFFSET %s"""
     params.extend([limit, offset])
     cur = conn.cursor()
     cur.execute(query, params)
@@ -214,22 +237,26 @@ def get_all(
 
 def get_count(
     conn,
-    feed_name: Optional[str] = None,
+    article_feed_id: Optional[int] = None,
     status: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     search: Optional[str] = None,
 ) -> int:
-    where, params = _filters(feed_name, status, date_from, date_to, search)
+    where, params = _filters(article_feed_id, status, date_from, date_to, search)
     cur = conn.cursor()
-    cur.execute(f"SELECT COUNT(*) as c FROM articles{where}", params)
+    cur.execute(
+        f"""SELECT COUNT(*) as c FROM articles a
+            JOIN article_feeds af ON af.id = a.article_feed_id{where}""",
+        params,
+    )
     count = cur.fetchone()["c"]
     cur.close()
     return count
 
 
 def _filters(
-    feed_name: Optional[str],
+    article_feed_id: Optional[int],
     status: Optional[str],
     date_from: Optional[str],
     date_to: Optional[str],
@@ -239,28 +266,34 @@ def _filters(
     clauses: list[str] = []
     params: list = []
     if not include_archived:
-        clauses.append("archived_at IS NULL")
-    if feed_name:
-        clauses.append("feed_name = %s")
-        params.append(feed_name)
+        clauses.append("a.archived_at IS NULL")
+    if article_feed_id:
+        clauses.append("a.article_feed_id = %s")
+        params.append(article_feed_id)
     if status:
-        clauses.append("status = %s")
+        clauses.append("a.status = %s")
         params.append(status)
     if date_from:
-        clauses.append("published_date::DATE >= %s::DATE")
+        clauses.append("a.published_date::DATE >= %s::DATE")
         params.append(date_from)
     if date_to:
-        clauses.append("published_date::DATE <= %s::DATE")
+        clauses.append("a.published_date::DATE <= %s::DATE")
         params.append(date_to)
     if search:
-        clauses.append("(title LIKE %s OR description LIKE %s)")
+        clauses.append("(a.title LIKE %s OR a.description LIKE %s)")
         params.extend([f"%{search}%", f"%{search}%"])
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     return where, params
 
 
-def get_feed_names(conn) -> list[str]:
-    return [row["feed_name"] for row in _fetchall(conn, "SELECT DISTINCT feed_name FROM articles ORDER BY feed_name")]
+def get_feed_names(conn) -> list[dict]:
+    return _fetchall(
+        conn,
+        """SELECT DISTINCT af.id as article_feed_id, af.name as feed_name
+           FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
+           ORDER BY af.name""",
+    )
 
 
 def reset_for_rerun(conn, article_id: int) -> None:
@@ -275,7 +308,7 @@ def get_needing_one_sentence(conn) -> list:
     return _fetchall(
         conn,
         """SELECT a.id, a.content FROM articles a
-           JOIN article_feeds af ON a.feed_name = af.name
+           JOIN article_feeds af ON af.id = a.article_feed_id
            WHERE a.one_sentence_summary IS NULL AND a.content IS NOT NULL
              AND af.auto_summarize = 1""",
     )

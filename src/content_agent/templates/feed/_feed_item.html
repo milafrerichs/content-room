@@ -23,6 +23,10 @@
       <div class="flex items-center gap-2 mb-0.5">
         <span class="mono text-xs text-accent tracking-wide">{{ item.source }}</span>
 
+        {% if item.source_owner_type == 'org' %}
+        <span class="mono text-xs px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">Org</span>
+        {% endif %}
+
         {% if item.category %}
         <span class="mono text-xs px-1.5 py-0.5 rounded-full bg-accent-light text-accent-text border border-accent/20">{{ item.category }}</span>
         {% endif %}

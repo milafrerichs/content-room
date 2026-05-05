@@ -71,6 +71,7 @@ class TaskModelOverride(BaseModel):
 class ArticleFeed(BaseModel):
     """RSS feed configuration for articles."""
 
+    id: Optional[int] = None
     name: str
     url: HttpUrl
     category: Optional[str] = None
@@ -80,6 +81,7 @@ class ArticleFeed(BaseModel):
     @classmethod
     def from_row(cls, row: dict) -> "ArticleFeed":
         return cls(
+            id=row.get("id"),
             name=row["name"],
             url=row["url"],
             category=row.get("category"),
@@ -97,6 +99,7 @@ class Article(BaseModel):
     content: str
     description: Optional[str] = None
     feed_name: str
+    article_feed_id: Optional[int] = None
     summary_path: Optional[Path] = None
 
 
@@ -286,12 +289,14 @@ class PodcastEpisode(BaseModel):
     published_date: datetime
     duration: Optional[str] = None
     podcast_name: str
+    podcast_feed_id: Optional[int] = None
     local_audio_path: Optional[Path] = None
     transcript_path: Optional[Path] = None
     summary_path: Optional[Path] = None
 
 
 class PodcastFeed(BaseModel):
+    id: Optional[int] = None
     name: str
     url: HttpUrl
     category: Optional[str] = None
@@ -301,6 +306,7 @@ class PodcastFeed(BaseModel):
     @classmethod
     def from_row(cls, row: dict) -> "PodcastFeed":
         return cls(
+            id=row.get("id"),
             name=row["name"],
             url=row["url"],
             category=row.get("category"),

@@ -26,6 +26,9 @@
             </div>
             {% endif %}
             <h3 class="text-sm font-semibold text-slate-800 truncate">{{ feed.name }}</h3>
+            {% if feed.owner_type == 'org' %}
+            <span class="mono text-xs px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200 flex-shrink-0">Org</span>
+            {% endif %}
           </div>
           <p class="mono text-xs text-slate-400 truncate" title="{{ feed.url }}">{{ feed.url }}</p>
         </div>

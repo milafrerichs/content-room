@@ -16,7 +16,7 @@ PAGE_SIZE = 24
 def episodes_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
-        podcast_names = episodes.get_podcast_names(conn)
+        podcast_feeds = episodes.get_podcast_names(conn)
         episode_list = episodes.get_all(conn, limit=PAGE_SIZE, offset=0)
         total = episodes.get_count(conn)
     finally:
@@ -28,7 +28,7 @@ def episodes_page(request: Request, user: CurrentUser):
         {
             "request": request,
             "episodes": episode_list,
-            "podcast_names": podcast_names,
+            "podcast_feeds": podcast_feeds,
             "total": total,
             "page": 1,
             "page_size": PAGE_SIZE,
@@ -41,7 +41,7 @@ def episodes_page(request: Request, user: CurrentUser):
 def episodes_search(
     request: Request,
     user: CurrentUser,
-    podcast_name: Optional[str] = None,
+    podcast_feed_id: Optional[int] = None,
     status: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -53,7 +53,7 @@ def episodes_search(
     try:
         episode_list = episodes.get_all(
             conn,
-            podcast_name=podcast_name or None,
+            podcast_feed_id=podcast_feed_id,
             status=status or None,
             date_from=date_from or None,
             date_to=date_to or None,
@@ -63,7 +63,7 @@ def episodes_search(
         )
         total = episodes.get_count(
             conn,
-            podcast_name=podcast_name or None,
+            podcast_feed_id=podcast_feed_id,
             status=status or None,
             date_from=date_from or None,
             date_to=date_to or None,
@@ -73,7 +73,7 @@ def episodes_search(
         conn.close()
 
     filters = {
-        "podcast_name": podcast_name,
+        "podcast_feed_id": podcast_feed_id,
         "status": status,
         "date_from": date_from,
         "date_to": date_to,

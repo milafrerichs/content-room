@@ -44,9 +44,65 @@ def init_db(database_url: str):
     cur = conn.cursor()
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            clerk_id TEXT PRIMARY KEY,
+            email TEXT,
+            display_name TEXT,
+            image_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS organizations (
+            clerk_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT,
+            image_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS org_members (
+            org_id TEXT NOT NULL REFERENCES organizations(clerk_id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(clerk_id) ON DELETE CASCADE,
+            role TEXT NOT NULL DEFAULT 'org:member',
+            joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (org_id, user_id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS podcast_feeds (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            category TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            auto_summarize INTEGER NOT NULL DEFAULT 0,
+            owner_type TEXT NOT NULL DEFAULT 'user',
+            owner_id TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS article_feeds (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            category TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            auto_summarize INTEGER NOT NULL DEFAULT 0,
+            owner_type TEXT NOT NULL DEFAULT 'user',
+            owner_id TEXT
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
             id SERIAL PRIMARY KEY,
-            podcast_name TEXT NOT NULL,
+            podcast_feed_id INTEGER NOT NULL REFERENCES podcast_feeds(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             audio_url TEXT NOT NULL,
             published_date TEXT NOT NULL,
@@ -64,14 +120,14 @@ def init_db(database_url: str):
             read_at TIMESTAMPTZ,
             archived_at TIMESTAMPTZ,
             read_later_at TIMESTAMPTZ,
-            UNIQUE(podcast_name, audio_url)
+            UNIQUE(podcast_feed_id, audio_url)
         )
     """)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS articles (
             id SERIAL PRIMARY KEY,
-            feed_name TEXT NOT NULL,
+            article_feed_id INTEGER NOT NULL REFERENCES article_feeds(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             url TEXT NOT NULL,
             published_date TEXT NOT NULL,
@@ -88,29 +144,7 @@ def init_db(database_url: str):
             read_at TIMESTAMPTZ,
             archived_at TIMESTAMPTZ,
             read_later_at TIMESTAMPTZ,
-            UNIQUE(feed_name, url)
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS podcast_feeds (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            url TEXT NOT NULL,
-            category TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            auto_summarize INTEGER NOT NULL DEFAULT 0
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS article_feeds (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            url TEXT NOT NULL,
-            category TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            auto_summarize INTEGER NOT NULL DEFAULT 0
+            UNIQUE(article_feed_id, url)
         )
     """)
 

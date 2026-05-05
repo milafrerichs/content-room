@@ -118,6 +118,22 @@
       </button>
     </div>
 
+    <!-- Org Switcher -->
+    {% if user and user.all_org_ids %}
+    <div class="px-3 py-2 border-b border-surface-200">
+      <form method="post" action="/context/switch-org" class="flex flex-col gap-1">
+        <label class="text-xs text-slate-400 font-medium nav-label">Context</label>
+        <select name="org_id" onchange="this.form.submit()"
+                class="form-input text-xs rounded px-2 py-1.5 w-full">
+          <option value="" {% if not user.active_org_id %}selected{% endif %}>Personal</option>
+          {% for org_id in user.all_org_ids %}
+          <option value="{{ org_id }}" {% if user.active_org_id == org_id %}selected{% endif %}>{{ org_id }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+    {% endif %}
+
     <!-- Navigation -->
     <nav class="flex-1 px-3 py-4 space-y-0.5">
       {% macro nav_item(href, match, label, icon_path) %}
