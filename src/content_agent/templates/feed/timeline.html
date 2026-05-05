@@ -65,9 +65,63 @@
     </div>
   </div>
 
-  <!-- Hidden field to track active view -->
+  <!-- Hidden fields to carry current filter state -->
   <input type="hidden" name="view" value="{{ filters.view }}" />
   <input type="hidden" name="category" value="{{ filters.category or '' }}" />
+  <input type="hidden" name="owner" value="{{ filters.owner or '' }}" />
+  <input type="hidden" name="kind" value="{{ filters.kind or '' }}" />
+
+  <!-- Quick filter chips -->
+  {% if user and user.all_org_ids %}
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <span class="mono text-xs text-slate-400 mr-1">Source:</span>
+    {% for chip_owner, chip_label in [('', 'All'), ('personal', 'Personal'), ('org', 'Org')] %}
+    <button
+      hx-get="/feed"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='source'],[name='search'],[name='view'],[name='category'],[name='kind']"
+      hx-vals='{"owner": "{{ chip_owner }}"}'
+      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+        {% if filters.owner == chip_owner or (not filters.owner and chip_owner == '') %}
+          {% if chip_owner == 'org' %}bg-purple-600 text-white border-purple-600
+          {% else %}bg-accent text-white border-accent{% endif %}
+        {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
+    >{{ chip_label }}</button>
+    {% endfor %}
+
+    <span class="w-px h-4 bg-surface-200 mx-1"></span>
+    <span class="mono text-xs text-slate-400 mr-1">Type:</span>
+    {% for chip_kind, chip_label in [('', 'All'), ('episode', 'Episodes'), ('article', 'Articles')] %}
+    <button
+      hx-get="/feed"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='source'],[name='search'],[name='view'],[name='category'],[name='owner']"
+      hx-vals='{"kind": "{{ chip_kind }}"}'
+      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+        {% if filters.kind == chip_kind or (not filters.kind and chip_kind == '') %}bg-accent text-white border-accent
+        {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
+    >{{ chip_label }}</button>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <span class="mono text-xs text-slate-400 mr-1">Type:</span>
+    {% for chip_kind, chip_label in [('', 'All'), ('episode', 'Episodes'), ('article', 'Articles')] %}
+    <button
+      hx-get="/feed"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='source'],[name='search'],[name='view'],[name='category']"
+      hx-vals='{"kind": "{{ chip_kind }}"}'
+      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+        {% if filters.kind == chip_kind or (not filters.kind and chip_kind == '') %}bg-accent text-white border-accent
+        {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
+    >{{ chip_label }}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <!-- Tab bar -->
   <div class="flex items-center gap-1 mb-6 bg-white border border-surface-200 rounded-xl p-1">

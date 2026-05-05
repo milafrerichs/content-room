@@ -24,7 +24,10 @@ import json
 
 def clerk_get(path: str, secret_key: str) -> dict | list:
     url = f"https://api.clerk.com/v1{path}"
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {secret_key}"})
+    req = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "control-room"},
+    )
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read())
 
@@ -51,10 +54,12 @@ def fetch_all_pages(path: str, secret_key: str) -> list[dict]:
 
 def main() -> None:
     secret_key = os.environ.get("CLERK_SECRET_KEY")
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = os.environ.get("DATABASE_URL", "postgresql://localhost/content_agent")
 
     if not secret_key:
-        print("ERROR: CLERK_SECRET_KEY environment variable is required", file=sys.stderr)
+        print(
+            "ERROR: CLERK_SECRET_KEY environment variable is required", file=sys.stderr
+        )
         sys.exit(1)
     if not db_url:
         print("ERROR: DATABASE_URL environment variable is required", file=sys.stderr)
@@ -64,7 +69,9 @@ def main() -> None:
     try:
         orgs = fetch_all_pages("/organizations", secret_key)
     except urllib.error.HTTPError as e:
-        print(f"ERROR: Clerk API returned {e.code}: {e.read().decode()}", file=sys.stderr)
+        print(
+            f"ERROR: Clerk API returned {e.code}: {e.read().decode()}", file=sys.stderr
+        )
         sys.exit(1)
 
     if not orgs:
@@ -75,7 +82,11 @@ def main() -> None:
     for org in orgs:
         print(f"  {org['id']}  {org['name']}")
 
-    confirm = input(f"\nSync {len(orgs)} org(s) and their members into the database? [y/N] ").strip().lower()
+    confirm = (
+        input(f"\nSync {len(orgs)} org(s) and their members into the database? [y/N] ")
+        .strip()
+        .lower()
+    )
     if confirm != "y":
         print("Aborted.")
         sys.exit(0)
@@ -99,7 +110,9 @@ def main() -> None:
             orgs_upserted += 1
 
             # Fetch members for this org
-            memberships = fetch_all_pages(f"/organizations/{org['id']}/memberships", secret_key)
+            memberships = fetch_all_pages(
+                f"/organizations/{org['id']}/memberships", secret_key
+            )
             for m in memberships:
                 pub_user = m.get("public_user_data", {})
                 user_id = pub_user.get("user_id") or m.get("user_id")
@@ -128,7 +141,9 @@ def main() -> None:
                 members_upserted += 1
 
         conn.commit()
-        print(f"\nDone. Upserted {orgs_upserted} org(s) and {members_upserted} member(s).")
+        print(
+            f"\nDone. Upserted {orgs_upserted} org(s) and {members_upserted} member(s)."
+        )
 
     finally:
         conn.close()

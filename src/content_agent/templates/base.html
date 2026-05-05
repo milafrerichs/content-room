@@ -118,11 +118,11 @@
       </button>
     </div>
 
-    <!-- Org Switcher -->
+    <!-- Org action context (for creating org feeds / sharing to org) -->
     {% if user and user.all_org_ids %}
     <div class="px-3 py-2 border-b border-surface-200">
       <form method="post" action="/context/switch-org" class="flex flex-col gap-1">
-        <label class="text-xs text-slate-400 font-medium nav-label">Context</label>
+        <label class="text-xs text-slate-400 font-medium nav-label" title="Controls which org is used when you create org feeds or share items">Acting as</label>
         <select name="org_id" onchange="this.form.submit()"
                 class="form-input text-xs rounded px-2 py-1.5 w-full">
           <option value="" {% if not user.active_org_id %}selected{% endif %}>Personal</option>

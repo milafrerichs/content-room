@@ -46,3 +46,32 @@
 2026-05-02 18:29:11,776 - content_agent.delivery - ERROR - Failed to send Slack digest: connection error
 2026-05-02 19:44:12,672 - content_agent.delivery - ERROR - Slack webhook returned 400: Bad Request
 2026-05-02 19:44:12,672 - content_agent.delivery - ERROR - Failed to send Slack digest: connection error
+2026-05-05 06:58:48,529 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 07:39:13,141 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 07:43:05,820 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:00:17,904 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:01:55,342 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:02:54,513 - content_agent.agent - INFO - Starting content processing
+2026-05-05 08:02:54,528 - content_agent.agent - INFO - Fetching RSS feed: Feel Better Live More
+2026-05-05 08:02:54,531 - content_agent.agent - INFO - Fetching RSS feed: Feel Better Live More
+2026-05-05 08:02:54,532 - content_agent.agent - INFO - Fetching RSS feed: Huberman Lab
+2026-05-05 08:02:54,533 - content_agent.agent - INFO - Fetching RSS feed: Huberman Lab
+2026-05-05 08:02:54,535 - content_agent.agent - INFO - Fetching RSS feed: bike_shed
+2026-05-05 08:02:54,536 - content_agent.agent - INFO - Fetching RSS feed: bike_shed
+2026-05-05 08:02:54,540 - content_agent.agent - INFO - Fetching RSS feed: on_rails
+2026-05-05 08:02:54,541 - content_agent.agent - INFO - Fetching RSS feed: on_rails
+2026-05-05 08:02:54,543 - content_agent.agent - INFO - Fetching RSS feed: remote_ruby
+2026-05-05 08:02:54,545 - content_agent.agent - INFO - Fetching RSS feed: remote_ruby
+2026-05-05 08:02:54,547 - content_agent.agent - INFO - Fetching RSS feed: ten_percent
+2026-05-05 08:02:54,548 - content_agent.agent - INFO - Fetching RSS feed: ten_percent
+2026-05-05 08:03:04,250 - content_agent.agent - INFO - Fetching article feed: Simon Willison
+2026-05-05 08:03:04,251 - content_agent.agent - INFO - Fetching article feed: Simon Willison
+2026-05-05 08:03:04,251 - content_agent.agent - INFO - Fetching article feed: Simon Willison's Weblog
+2026-05-05 08:03:04,469 - content_agent.agent - INFO - Discovery complete: 4 episodes, 18 articles discovered
+2026-05-05 08:06:02,277 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:10:56,473 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:26:00,215 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:27:57,404 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:49:10,802 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 08:50:42,412 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.
+2026-05-05 09:37:57,140 - content_agent.web.deps - INFO - JWT verification failed: Signature has expired.

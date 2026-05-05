@@ -64,9 +64,9 @@ def _get_owned_item(conn, kind: str, item_id: int, owner) -> Optional[dict]:
     return articles.get_by_id(conn, item_id, owner)
 
 
-def _feeds_context(conn, owner, active_org_id=None):
-    podcast_feed_list = feeds.get_podcasts_with_stats(conn, owner, active_org_id=active_org_id)
-    article_feed_list = feeds.get_articles_with_stats(conn, owner, active_org_id=active_org_id)
+def _feeds_context(conn, owner, all_org_ids=None, active_org_id=None):
+    podcast_feed_list = feeds.get_podcasts_with_stats(conn, owner, all_org_ids=all_org_ids, active_org_id=active_org_id)
+    article_feed_list = feeds.get_articles_with_stats(conn, owner, all_org_ids=all_org_ids, active_org_id=active_org_id)
 
     all_feeds = [
         {**f, "type": "podcast"} for f in podcast_feed_list
@@ -90,12 +90,19 @@ def feed_page(
     search: Optional[str] = None,
     view: Optional[str] = None,
     category: Optional[str] = None,
+    owner: Optional[str] = None,
+    kind: Optional[str] = None,
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
-        categories = feeds.get_all_categories(conn, user.owner, active_org_id=user.active_org_id)
-        items = feeds.get_unified(conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id, source=source or None, search=search or None)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
+        categories = feeds.get_all_categories(conn, user.owner, all_org_ids=user.all_org_ids)
+        items = feeds.get_unified(
+            conn, user.owner, user_id=user.user_id,
+            all_org_ids=user.all_org_ids,
+            source=source or None, search=search or None,
+            owner_filter=owner or None, kind_filter=kind or None,
+        )
     finally:
         conn.close()
 
@@ -131,7 +138,7 @@ def feed_page(
             "categories": categories,
             "by_category": by_category,
             "sorted_categories": sorted_categories,
-            "filters": {"source": source, "search": search, "view": active_view, "category": category},
+            "filters": {"source": source, "search": search, "view": active_view, "category": category, "owner": owner, "kind": kind},
         },
     )
 
@@ -145,9 +152,9 @@ def archive_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
         items = feeds.get_unified(
-            conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id,
+            conn, user.owner, user_id=user.user_id, all_org_ids=user.all_org_ids,
             source=source or None, search=search or None, archived_only=True,
         )
     finally:
@@ -262,9 +269,9 @@ def read_later_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
         items = feeds.get_unified(
-            conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id,
+            conn, user.owner, user_id=user.user_id, all_org_ids=user.all_org_ids,
             source=source or None, search=search or None, read_later_only=True,
         )
     finally:
@@ -301,9 +308,9 @@ def mobile_page(
 ):
     conn = get_conn(request)
     try:
-        sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
+        sources = feeds.get_all_sources(conn, user.owner, all_org_ids=user.all_org_ids)
         items = feeds.get_unified(
-            conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id,
+            conn, user.owner, user_id=user.user_id, all_org_ids=user.all_org_ids,
             source=source or None,
             search=search or None,
             read_later_only=read_later == "1",
@@ -339,7 +346,7 @@ def switch_org(request: Request, user: CurrentUser, org_id: str = Form("")):
 def feeds_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -360,7 +367,7 @@ def sync_all_feeds(request: Request, user: CurrentUser):
         for af in config.article_feeds:
             feeds.upsert_article(conn, af.name, str(af.url), user.owner, auto_summarize=af.auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -389,7 +396,7 @@ def create_podcast_feed(
     try:
         feeds.upsert_podcast(conn, name, url, owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -430,7 +437,7 @@ def create_article_feed(
     try:
         feeds.upsert_article(conn, feed_name, feed_url, owner, category=category or None, auto_summarize=auto_summarize)
         conn.commit()
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -451,7 +458,7 @@ def update_podcast_category(
     try:
         feeds.update_podcast_category(conn, feed_name, user.owner, category.strip())
         conn.commit()
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -472,7 +479,7 @@ def toggle_podcast_auto_summarize(
     conn = get_conn(request)
     try:
         feeds.update_podcast_auto_summarize(conn, feed_name, user.owner, auto_summarize)
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -493,7 +500,7 @@ def toggle_article_auto_summarize(
     conn = get_conn(request)
     try:
         feeds.update_article_auto_summarize(conn, feed_name, user.owner, auto_summarize)
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
@@ -515,7 +522,7 @@ def update_article_category(
     try:
         feeds.update_article_category(conn, feed_name, user.owner, category.strip())
         conn.commit()
-        ctx = _feeds_context(conn, user.owner, active_org_id=user.active_org_id)
+        ctx = _feeds_context(conn, user.owner, all_org_ids=user.all_org_ids, active_org_id=user.active_org_id)
     finally:
         conn.close()
 
