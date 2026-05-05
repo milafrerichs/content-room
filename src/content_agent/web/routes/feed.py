@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi import HTTPException
 
 from content_agent.feed_discovery import discover_feed
-from content_agent.queries import articles, episodes, feeds, subscriptions
+from content_agent.queries import articles, episodes, feeds, item_state, subscriptions
 from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_download_single_episode
 
@@ -94,7 +94,7 @@ def feed_page(
     try:
         sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
         categories = feeds.get_all_categories(conn, user.owner, active_org_id=user.active_org_id)
-        items = feeds.get_unified(conn, user.owner, active_org_id=user.active_org_id, source=source or None, search=search or None)
+        items = feeds.get_unified(conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id, source=source or None, search=search or None)
     finally:
         conn.close()
 
@@ -146,7 +146,7 @@ def archive_page(
     try:
         sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
         items = feeds.get_unified(
-            conn, user.owner, active_org_id=user.active_org_id,
+            conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id,
             source=source or None, search=search or None, archived_only=True,
         )
     finally:
@@ -179,10 +179,7 @@ def archive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.archive(conn, item_id)
-        else:
-            articles.archive(conn, item_id)
+        item_state.archive(conn, user.user_id, kind, item_id)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -194,10 +191,7 @@ def unarchive_item(request: Request, kind: str, item_id: int, user: CurrentUser)
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.unarchive(conn, item_id)
-        else:
-            articles.unarchive(conn, item_id)
+        item_state.unarchive(conn, user.user_id, kind, item_id)
     finally:
         conn.close()
     return HTMLResponse("")
@@ -219,11 +213,8 @@ def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.mark_read_later(conn, item_id)
-        else:
-            articles.mark_read_later(conn, item_id)
-        item = feeds.get_unified_item(conn, kind, item_id)
+        item_state.mark_read_later(conn, user.user_id, kind, item_id)
+        item = feeds.get_unified_item(conn, kind, item_id, user.user_id)
     finally:
         conn.close()
     if not item:
@@ -237,11 +228,8 @@ def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUs
     try:
         if _get_owned_item(conn, kind, item_id, user.owner) is None:
             return HTMLResponse("", status_code=404)
-        if kind == "episode":
-            episodes.unmark_read_later(conn, item_id)
-        else:
-            articles.unmark_read_later(conn, item_id)
-        item = feeds.get_unified_item(conn, kind, item_id)
+        item_state.unmark_read_later(conn, user.user_id, kind, item_id)
+        item = feeds.get_unified_item(conn, kind, item_id, user.user_id)
     finally:
         conn.close()
     if not item:
@@ -275,7 +263,7 @@ def read_later_page(
     try:
         sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
         items = feeds.get_unified(
-            conn, user.owner, active_org_id=user.active_org_id,
+            conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id,
             source=source or None, search=search or None, read_later_only=True,
         )
     finally:
@@ -314,7 +302,7 @@ def mobile_page(
     try:
         sources = feeds.get_all_sources(conn, user.owner, active_org_id=user.active_org_id)
         items = feeds.get_unified(
-            conn, user.owner, active_org_id=user.active_org_id,
+            conn, user.owner, user_id=user.user_id, active_org_id=user.active_org_id,
             source=source or None,
             search=search or None,
             read_later_only=read_later == "1",

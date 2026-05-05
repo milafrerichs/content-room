@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
-from content_agent.queries import articles, feeds
+from content_agent.queries import articles, feeds, item_state
 from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import run_rerun_article
 
@@ -135,7 +135,7 @@ def mark_read(request: Request, article_id: int, user: CurrentUser):
     try:
         if articles.get_by_id(conn, article_id, user.owner) is None:
             return Response(status_code=404)
-        articles.mark_read(conn, article_id)
+        item_state.mark_read(conn, user.user_id, "article", article_id)
     finally:
         conn.close()
     return Response(status_code=200, headers={"HX-Redirect": f"/articles/{article_id}"})

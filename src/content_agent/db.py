@@ -176,6 +176,18 @@ def init_db(database_url: str):
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_item_state (
+            user_id TEXT NOT NULL REFERENCES users(clerk_id) ON DELETE CASCADE,
+            item_kind TEXT NOT NULL,
+            item_id INTEGER NOT NULL,
+            read_at TIMESTAMPTZ,
+            archived_at TIMESTAMPTZ,
+            read_later_at TIMESTAMPTZ,
+            PRIMARY KEY (user_id, item_kind, item_id)
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS runs (
             id SERIAL PRIMARY KEY,
             started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
