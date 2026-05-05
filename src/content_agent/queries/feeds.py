@@ -240,7 +240,7 @@ def _visible_feed_ids_subquery(owner: Owner, all_org_ids: Optional[list], feed_t
     org_clause = ""
     if all_org_ids:
         placeholders = ", ".join(["%s"] * len(all_org_ids))
-        org_clause = f"OR (owner_type = 'org' AND owner_id IN ({placeholders}))"
+        org_clause = f"OR (owner_type = 'org' AND owner_id IN ({placeholders}) AND is_shared = TRUE)"
         params.extend(all_org_ids)
     params.extend(["user", owner.id, feed_type])
     subquery = f"""

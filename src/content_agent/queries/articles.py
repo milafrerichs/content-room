@@ -92,14 +92,38 @@ def get_unread(conn, limit: int = 20) -> list:
     )
 
 
-def get_by_id(conn, article_id: int, owner: Owner) -> Optional[dict]:
-    """Fetch an article, returning None if it doesn't exist or is not owned by owner."""
+def get_by_id(conn, article_id: int, owner: Owner, all_org_ids: Optional[list] = None) -> Optional[dict]:
+    """Fetch an article visible to owner: personal ownership, org-shared feed, or subscription."""
+    org_clause = ""
+    params: list = [article_id, owner.type, owner.id]
+    if all_org_ids:
+        placeholders = ", ".join(["%s"] * len(all_org_ids))
+        org_clause = f"OR (af.owner_type = 'org' AND af.owner_id IN ({placeholders}) AND af.is_shared = TRUE)"
+        params.extend(all_org_ids)
+    params.extend(["user", owner.id, "article"])
+    return _fetchone(
+        conn,
+        f"""SELECT a.*, af.name as feed_name FROM articles a
+           JOIN article_feeds af ON af.id = a.article_feed_id
+           WHERE a.id = %s AND (
+               (af.owner_type = %s AND af.owner_id = %s)
+               {org_clause}
+               OR af.id IN (
+                   SELECT feed_id FROM feed_subscriptions
+                   WHERE subscriber_type = %s AND subscriber_id = %s AND feed_type = %s
+               )
+           )""",
+        params,
+    )
+
+
+def get_by_id_internal(conn, article_id: int) -> Optional[dict]:
     return _fetchone(
         conn,
         """SELECT a.*, af.name as feed_name FROM articles a
            JOIN article_feeds af ON af.id = a.article_feed_id
-           WHERE a.id = %s AND af.owner_type = %s AND af.owner_id = %s""",
-        (article_id, owner.type, owner.id),
+           WHERE a.id = %s""",
+        (article_id,),
     )
 
 

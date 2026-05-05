@@ -33,11 +33,14 @@ def is_shared(conn, org_id: str, item_kind: str, item_id: int) -> bool:
     return row is not None
 
 
-def get_shared_items(conn, org_id: str, limit: int = 100) -> list[dict]:
+def get_shared_items(conn, org_ids: list, limit: int = 100) -> list[dict]:
+    if not org_ids:
+        return []
+    placeholders = ", ".join(["%s"] * len(org_ids))
     rows = _fetchall(
         conn,
-        """
-        SELECT si.id, si.item_kind, si.item_id, si.note, si.shared_at, si.shared_by,
+        f"""
+        SELECT si.id, si.org_id, si.item_kind, si.item_id, si.note, si.shared_at, si.shared_by,
                u.email as sharer_email, u.display_name as sharer_name,
                CASE si.item_kind
                  WHEN 'episode' THEN e.title
@@ -65,10 +68,10 @@ def get_shared_items(conn, org_id: str, limit: int = 100) -> list[dict]:
         LEFT JOIN podcast_feeds pf ON pf.id = e.podcast_feed_id
         LEFT JOIN articles a ON si.item_kind = 'article' AND a.id = si.item_id
         LEFT JOIN article_feeds af ON af.id = a.article_feed_id
-        WHERE si.org_id = %s
+        WHERE si.org_id IN ({placeholders})
         ORDER BY si.shared_at DESC
         LIMIT %s
         """,
-        (org_id, limit),
+        list(org_ids) + [limit],
     )
     return [dict(row) for row in rows]

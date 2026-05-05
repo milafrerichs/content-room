@@ -100,7 +100,7 @@ def articles_search(
 def article_detail(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id, user.owner)
+        article = articles.get_by_id(conn, article_id, user.owner, all_org_ids=user.all_org_ids)
     finally:
         conn.close()
 
@@ -133,7 +133,7 @@ def article_detail(request: Request, article_id: int, user: CurrentUser):
 def mark_read(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if articles.get_by_id(conn, article_id, user.owner) is None:
+        if articles.get_by_id(conn, article_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return Response(status_code=404)
         item_state.mark_read(conn, user.user_id, "article", article_id)
     finally:
@@ -145,7 +145,7 @@ def mark_read(request: Request, article_id: int, user: CurrentUser):
 def article_summarize(request: Request, article_id: int, user: CurrentUser, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id, user.owner)
+        article = articles.get_by_id(conn, article_id, user.owner, all_org_ids=user.all_org_ids)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
         articles.reset_for_rerun(conn, article_id)
@@ -167,7 +167,7 @@ def article_summarize(request: Request, article_id: int, user: CurrentUser, back
 def article_actions(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        article = articles.get_by_id(conn, article_id, user.owner)
+        article = articles.get_by_id(conn, article_id, user.owner, all_org_ids=user.all_org_ids)
         if article is None:
             return HTMLResponse("Article not found", status_code=404)
         article_dict = dict(article)
@@ -185,7 +185,7 @@ def article_actions(request: Request, article_id: int, user: CurrentUser):
 def archive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if articles.get_by_id(conn, article_id, user.owner) is None:
+        if articles.get_by_id(conn, article_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return Response(status_code=404)
         articles.archive(conn, article_id)
     finally:
@@ -197,7 +197,7 @@ def archive(request: Request, article_id: int, user: CurrentUser):
 def unarchive(request: Request, article_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if articles.get_by_id(conn, article_id, user.owner) is None:
+        if articles.get_by_id(conn, article_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return Response(status_code=404)
         articles.unarchive(conn, article_id)
     finally:

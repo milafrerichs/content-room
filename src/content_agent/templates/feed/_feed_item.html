@@ -126,7 +126,7 @@
     {% endif %}
 
     <!-- Share to Org -->
-    {% if user and user.active_org_id %}
+    {% if user and user.all_org_ids %}
     <button
       id="share-btn-{{ item.kind }}-{{ item.id }}"
       hx-post="/feed/{{ item.kind }}/{{ item.id }}/share-to-org"
