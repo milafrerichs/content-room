@@ -627,16 +627,6 @@ class ContentAgent(BaseModel):
         logger.info("Starting content processing")
 
         conn = db.init_db(self.config.database_url)
-
-        # Sync feeds from config into DB (legacy CLI path — uses a system owner)
-        from content_agent.web.auth import Owner
-        system_owner = Owner.user("system")
-        for pf in self.config.podcast_feeds:
-            feeds.upsert_podcast(conn, pf.name, str(pf.url), owner=system_owner, auto_summarize=pf.auto_summarize)
-        for af in self.config.article_feeds:
-            feeds.upsert_article(conn, af.name, str(af.url), owner=system_owner, auto_summarize=af.auto_summarize)
-        conn.commit()
-
         run_id = runs.start(conn)
         episodes_discovered = 0
         articles_discovered = 0

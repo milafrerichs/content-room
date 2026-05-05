@@ -49,10 +49,14 @@ def main() -> None:
         )
         print(f"User row ensured for {clerk_id}")
 
-        # Show what will be updated
-        cur.execute("SELECT COUNT(*) as n FROM podcast_feeds WHERE owner_id IS NULL")
+        # Show what will be updated — catches NULL, empty string, and legacy 'system' owner
+        cur.execute(
+            "SELECT COUNT(*) as n FROM podcast_feeds WHERE owner_id IS NULL OR owner_id IN ('', 'system')"
+        )
         n_podcasts = cur.fetchone()["n"]
-        cur.execute("SELECT COUNT(*) as n FROM article_feeds WHERE owner_id IS NULL")
+        cur.execute(
+            "SELECT COUNT(*) as n FROM article_feeds WHERE owner_id IS NULL OR owner_id IN ('', 'system')"
+        )
         n_articles = cur.fetchone()["n"]
 
         if n_podcasts == 0 and n_articles == 0:
@@ -61,21 +65,23 @@ def main() -> None:
             return
 
         print(f"\nWill assign to {clerk_id}:")
-        print(f"  {n_podcasts} podcast feed(s)")
-        print(f"  {n_articles} article feed(s)")
+        print(f"  {n_podcasts} podcast feed(s) (owner_id IS NULL, '', or 'system')")
+        print(f"  {n_articles} article feed(s) (owner_id IS NULL, '', or 'system')")
         confirm = input("\nProceed? [y/N] ").strip().lower()
         if confirm != "y":
             print("Aborted.")
             sys.exit(0)
 
         cur.execute(
-            "UPDATE podcast_feeds SET owner_type = 'user', owner_id = %s WHERE owner_id IS NULL",
+            "UPDATE podcast_feeds SET owner_type = 'user', owner_id = %s"
+            " WHERE owner_id IS NULL OR owner_id IN ('', 'system')",
             (clerk_id,),
         )
         print(f"Updated {cur.rowcount} podcast feed(s)")
 
         cur.execute(
-            "UPDATE article_feeds SET owner_type = 'user', owner_id = %s WHERE owner_id IS NULL",
+            "UPDATE article_feeds SET owner_type = 'user', owner_id = %s"
+            " WHERE owner_id IS NULL OR owner_id IN ('', 'system')",
             (clerk_id,),
         )
         print(f"Updated {cur.rowcount} article feed(s)")

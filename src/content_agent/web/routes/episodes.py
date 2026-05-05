@@ -98,7 +98,7 @@ def episodes_search(
 def episode_detail(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id, user.owner)
+        episode = episodes.get_by_id(conn, episode_id, user.owner, all_org_ids=user.all_org_ids)
     finally:
         conn.close()
 
@@ -138,7 +138,7 @@ def episode_detail(request: Request, episode_id: int, user: CurrentUser):
 def mark_read(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+        if episodes.get_by_id(conn, episode_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return Response(status_code=404)
         item_state.mark_read(conn, user.user_id, "episode", episode_id)
     finally:
@@ -150,7 +150,7 @@ def mark_read(request: Request, episode_id: int, user: CurrentUser):
 def archive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+        if episodes.get_by_id(conn, episode_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return Response(status_code=404)
         episodes.archive(conn, episode_id)
     finally:
@@ -162,7 +162,7 @@ def archive(request: Request, episode_id: int, user: CurrentUser):
 def unarchive(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if episodes.get_by_id(conn, episode_id, user.owner) is None:
+        if episodes.get_by_id(conn, episode_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return Response(status_code=404)
         episodes.unarchive(conn, episode_id)
     finally:
@@ -189,7 +189,7 @@ def determine_reset_status(episode: dict) -> str:
 def episode_rerun(request: Request, episode_id: int, user: CurrentUser, background_tasks: BackgroundTasks):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id, user.owner)
+        episode = episodes.get_by_id(conn, episode_id, user.owner, all_org_ids=user.all_org_ids)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         reset_to = determine_reset_status(episode)
@@ -212,7 +212,7 @@ def episode_rerun(request: Request, episode_id: int, user: CurrentUser, backgrou
 def episode_actions(request: Request, episode_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        episode = episodes.get_by_id(conn, episode_id, user.owner)
+        episode = episodes.get_by_id(conn, episode_id, user.owner, all_org_ids=user.all_org_ids)
         if episode is None:
             return HTMLResponse("Episode not found", status_code=404)
         episode_dict = dict(episode)

@@ -57,11 +57,11 @@ def _fetch_rss_episodes(feed_url: str) -> list[dict]:
     return episode_list
 
 
-def _get_owned_item(conn, kind: str, item_id: int, owner) -> Optional[dict]:
-    """Ownership gate for kind-dispatched item routes. Returns None if not found or not owned."""
+def _get_owned_item(conn, kind: str, item_id: int, owner, all_org_ids=None) -> Optional[dict]:
+    """Visibility gate for kind-dispatched item routes. Returns None if not found or not visible."""
     if kind == "episode":
-        return episodes.get_by_id(conn, item_id, owner)
-    return articles.get_by_id(conn, item_id, owner)
+        return episodes.get_by_id(conn, item_id, owner, all_org_ids=all_org_ids)
+    return articles.get_by_id(conn, item_id, owner, all_org_ids=all_org_ids)
 
 
 def _feeds_context(conn, owner, all_org_ids=None, active_org_id=None):
@@ -185,7 +185,7 @@ def archive_page(
 def archive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+        if _get_owned_item(conn, kind, item_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return HTMLResponse("", status_code=404)
         item_state.archive(conn, user.user_id, kind, item_id)
     finally:
@@ -197,7 +197,7 @@ def archive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
 def unarchive_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+        if _get_owned_item(conn, kind, item_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return HTMLResponse("", status_code=404)
         item_state.unarchive(conn, user.user_id, kind, item_id)
     finally:
@@ -219,7 +219,7 @@ def _render_feed_item(request: Request, kind: str, item_id: int, item: dict, use
 def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+        if _get_owned_item(conn, kind, item_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return HTMLResponse("", status_code=404)
         item_state.mark_read_later(conn, user.user_id, kind, item_id)
         item = feeds.get_unified_item(conn, kind, item_id, user.user_id)
@@ -234,7 +234,7 @@ def read_later_item(request: Request, kind: str, item_id: int, user: CurrentUser
 def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+        if _get_owned_item(conn, kind, item_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return HTMLResponse("", status_code=404)
         item_state.unmark_read_later(conn, user.user_id, kind, item_id)
         item = feeds.get_unified_item(conn, kind, item_id, user.user_id)
@@ -249,7 +249,7 @@ def unread_later_item(request: Request, kind: str, item_id: int, user: CurrentUs
 def delete_item(request: Request, kind: str, item_id: int, user: CurrentUser):
     conn = get_conn(request)
     try:
-        if _get_owned_item(conn, kind, item_id, user.owner) is None:
+        if _get_owned_item(conn, kind, item_id, user.owner, all_org_ids=user.all_org_ids) is None:
             return HTMLResponse("", status_code=404)
         if kind == "episode":
             episodes.delete(conn, item_id)
@@ -777,11 +777,12 @@ def share_item_to_org(
     user: CurrentUser,
     note: str = Form(""),
 ):
-    if not user.active_org_id:
+    org_id = user.active_org_id or (user.all_org_ids[0] if user.all_org_ids else None)
+    if not org_id:
         return HTMLResponse("", status_code=403)
     conn = get_conn(request)
     try:
-        shared_items.share_item(conn, user.active_org_id, user.user_id, kind, item_id, note or None)
+        shared_items.share_item(conn, org_id, user.user_id, kind, item_id, note or None)
     finally:
         conn.close()
     return HTMLResponse(
@@ -797,11 +798,12 @@ def share_item_to_org(
 
 @router.delete("/feed/{kind}/{item_id}/share-to-org", response_class=HTMLResponse)
 def unshare_item_from_org(request: Request, kind: str, item_id: int, user: CurrentUser):
-    if not user.active_org_id:
+    org_id = user.active_org_id or (user.all_org_ids[0] if user.all_org_ids else None)
+    if not org_id:
         return HTMLResponse("", status_code=403)
     conn = get_conn(request)
     try:
-        shared_items.unshare_item(conn, user.active_org_id, kind, item_id)
+        shared_items.unshare_item(conn, org_id, kind, item_id)
     finally:
         conn.close()
     return HTMLResponse(
@@ -818,11 +820,11 @@ def unshare_item_from_org(request: Request, kind: str, item_id: int, user: Curre
 
 @router.get("/org/shared", response_class=HTMLResponse)
 def org_shared_page(request: Request, user: CurrentUser):
-    if not user.active_org_id:
-        return HTMLResponse("Switch to an org context to view shared items.", status_code=403)
+    if not user.all_org_ids:
+        return HTMLResponse("You are not a member of any organization.", status_code=403)
     conn = get_conn(request)
     try:
-        items = shared_items.get_shared_items(conn, user.active_org_id)
+        items = shared_items.get_shared_items(conn, user.all_org_ids)
     finally:
         conn.close()
     templates = request.app.state.templates
