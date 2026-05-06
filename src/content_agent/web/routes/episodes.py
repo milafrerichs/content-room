@@ -16,9 +16,9 @@ PAGE_SIZE = 24
 def episodes_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
-        podcast_feeds = episodes.get_podcast_names(conn)
-        episode_list = episodes.get_all(conn, limit=PAGE_SIZE, offset=0)
-        total = episodes.get_count(conn)
+        podcast_feeds = episodes.get_podcast_names(conn, owner=user.owner, all_org_ids=user.all_org_ids)
+        episode_list = episodes.get_all(conn, limit=PAGE_SIZE, offset=0, owner=user.owner, all_org_ids=user.all_org_ids)
+        total = episodes.get_count(conn, owner=user.owner, all_org_ids=user.all_org_ids)
     finally:
         conn.close()
 
@@ -60,6 +60,8 @@ def episodes_search(
             search=search or None,
             limit=PAGE_SIZE,
             offset=offset,
+            owner=user.owner,
+            all_org_ids=user.all_org_ids,
         )
         total = episodes.get_count(
             conn,
@@ -68,6 +70,8 @@ def episodes_search(
             date_from=date_from or None,
             date_to=date_to or None,
             search=search or None,
+            owner=user.owner,
+            all_org_ids=user.all_org_ids,
         )
     finally:
         conn.close()
