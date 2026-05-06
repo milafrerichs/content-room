@@ -247,8 +247,10 @@ def get_all(
     search: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
+    owner: Optional[Owner] = None,
+    all_org_ids: Optional[list] = None,
 ) -> list:
-    where, params = _filters(article_feed_id, status, date_from, date_to, search)
+    where, params = _filters(article_feed_id, status, date_from, date_to, search, owner=owner, all_org_ids=all_org_ids)
     query = f"""SELECT a.*, af.name as feed_name FROM articles a
                 JOIN article_feeds af ON af.id = a.article_feed_id{where}
                 ORDER BY a.published_date DESC LIMIT %s OFFSET %s"""
@@ -267,8 +269,10 @@ def get_count(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     search: Optional[str] = None,
+    owner: Optional[Owner] = None,
+    all_org_ids: Optional[list] = None,
 ) -> int:
-    where, params = _filters(article_feed_id, status, date_from, date_to, search)
+    where, params = _filters(article_feed_id, status, date_from, date_to, search, owner=owner, all_org_ids=all_org_ids)
     cur = conn.cursor()
     cur.execute(
         f"""SELECT COUNT(*) as c FROM articles a
@@ -280,6 +284,20 @@ def get_count(
     return count
 
 
+def _visible_feed_clause(owner: Owner, all_org_ids: Optional[list] = None) -> tuple[str, list]:
+    parts = ["(af.owner_type = %s AND af.owner_id = %s)"]
+    params: list = [owner.type, owner.id]
+    if all_org_ids:
+        placeholders = ", ".join(["%s"] * len(all_org_ids))
+        parts.append(f"(af.owner_type = 'org' AND af.owner_id IN ({placeholders}) AND af.is_shared = TRUE)")
+        params.extend(all_org_ids)
+    parts.append(
+        "af.id IN (SELECT feed_id FROM feed_subscriptions WHERE subscriber_type = %s AND subscriber_id = %s AND feed_type = %s)"
+    )
+    params.extend(["user", owner.id, "article"])
+    return "(" + " OR ".join(parts) + ")", params
+
+
 def _filters(
     article_feed_id: Optional[int],
     status: Optional[str],
@@ -287,9 +305,15 @@ def _filters(
     date_to: Optional[str],
     search: Optional[str],
     include_archived: bool = False,
+    owner: Optional[Owner] = None,
+    all_org_ids: Optional[list] = None,
 ) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
+    if owner:
+        clause, vis_params = _visible_feed_clause(owner, all_org_ids)
+        clauses.append(clause)
+        params.extend(vis_params)
     if not include_archived:
         clauses.append("a.archived_at IS NULL")
     if article_feed_id:
@@ -311,7 +335,18 @@ def _filters(
     return where, params
 
 
-def get_feed_names(conn) -> list[dict]:
+def get_feed_names(conn, owner: Optional[Owner] = None, all_org_ids: Optional[list] = None) -> list[dict]:
+    if owner:
+        clause, params = _visible_feed_clause(owner, all_org_ids)
+        return _fetchall(
+            conn,
+            f"""SELECT DISTINCT af.id as article_feed_id, af.name as feed_name
+               FROM articles a
+               JOIN article_feeds af ON af.id = a.article_feed_id
+               WHERE {clause}
+               ORDER BY af.name""",
+            params,
+        )
     return _fetchall(
         conn,
         """SELECT DISTINCT af.id as article_feed_id, af.name as feed_name

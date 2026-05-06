@@ -9,6 +9,8 @@ from pydantic import BaseModel
 
 from content_agent.db import _fetchall
 from content_agent.queries import articles, episodes
+from content_agent.queries.articles import _visible_feed_clause as _article_feed_clause
+from content_agent.queries.episodes import _visible_feed_clause as _episode_feed_clause
 from content_agent.web.deps import CurrentUser, get_conn
 from content_agent.web.processing import (
     run_rerun_article,
@@ -88,15 +90,16 @@ def list_episodes(
 ):
     conn = get_conn(request)
     try:
-        clauses = []
-        params: list = []
+        vis_clause, vis_params = _episode_feed_clause(user.owner, user.all_org_ids)
+        clauses = [vis_clause]
+        params: list = list(vis_params)
         if status:
             clauses.append("e.status = %s")
             params.append(status)
         if podcast_feed_id:
             clauses.append("e.podcast_feed_id = %s")
             params.append(podcast_feed_id)
-        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        where = " WHERE " + " AND ".join(clauses)
         rows = _fetchall(
             conn,
             f"""SELECT e.*, pf.name as podcast_name FROM episodes e
@@ -243,15 +246,16 @@ def list_articles(
 ):
     conn = get_conn(request)
     try:
-        clauses = []
-        params: list = []
+        vis_clause, vis_params = _article_feed_clause(user.owner, user.all_org_ids)
+        clauses = [vis_clause]
+        params: list = list(vis_params)
         if status:
             clauses.append("a.status = %s")
             params.append(status)
         if article_feed_id:
             clauses.append("a.article_feed_id = %s")
             params.append(article_feed_id)
-        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        where = " WHERE " + " AND ".join(clauses)
         rows = _fetchall(
             conn,
             f"""SELECT a.*, af.name as feed_name FROM articles a

@@ -16,9 +16,9 @@ PAGE_SIZE = 24
 def articles_page(request: Request, user: CurrentUser):
     conn = get_conn(request)
     try:
-        article_feeds = articles.get_feed_names(conn)
-        article_list = articles.get_all(conn, limit=PAGE_SIZE, offset=0)
-        total = articles.get_count(conn)
+        article_feeds = articles.get_feed_names(conn, owner=user.owner, all_org_ids=user.all_org_ids)
+        article_list = articles.get_all(conn, limit=PAGE_SIZE, offset=0, owner=user.owner, all_org_ids=user.all_org_ids)
+        total = articles.get_count(conn, owner=user.owner, all_org_ids=user.all_org_ids)
     finally:
         conn.close()
 
@@ -61,6 +61,8 @@ def articles_search(
             search=search or None,
             limit=PAGE_SIZE,
             offset=offset,
+            owner=user.owner,
+            all_org_ids=user.all_org_ids,
         )
         total = articles.get_count(
             conn,
@@ -69,6 +71,8 @@ def articles_search(
             date_from=date_from or None,
             date_to=date_to or None,
             search=search or None,
+            owner=user.owner,
+            all_org_ids=user.all_org_ids,
         )
     finally:
         conn.close()
