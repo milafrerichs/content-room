@@ -2,10 +2,23 @@ from typing import Literal
 
 from pydantic import BaseModel
 from pydantic_ai import Agent
+from openai.types.chat import ChatCompletion
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+
+class _LenientOpenAIModel(OpenAIModel):
+    """OpenAIModel that tolerates non-standard service_tier values (e.g. from OpenRouter)."""
+
+    _VALID_SERVICE_TIERS = frozenset({"auto", "default", "flex", "scale", "priority"})
+
+    def _validate_completion(self, response: ChatCompletion) -> ChatCompletion:
+        data = response.model_dump()
+        if data.get("service_tier") not in self._VALID_SERVICE_TIERS:
+            data["service_tier"] = None
+        return ChatCompletion.model_validate(data)
 
 from .models import DigestItem, Insights, MicroSummary, OneSentenceSummary, PodcastSummary, Recommendations, SponsorInfo
 
@@ -180,7 +193,7 @@ def _get_model_spec(
         profile = ModelProfile(default_structured_output_mode="prompted")
         return OpenAIModel(model, provider=ollama_provider, profile=profile)
     elif provider == "openrouter":
-        return OpenAIModel(model, provider=OpenRouterProvider())
+        return _LenientOpenAIModel(model, provider=OpenRouterProvider())
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
