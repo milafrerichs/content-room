@@ -277,6 +277,17 @@ def get_unified(
     params_ep: list = list(ep_sub_params)
     params_art: list = list(art_sub_params)
 
+    shared_ep_sub = ""
+    shared_art_sub = ""
+    if effective_orgs and owner_filter != "personal":
+        org_ph = ", ".join(["%s"] * len(effective_orgs))
+        shared_ep_sub = f"e.id IN (SELECT item_id FROM shared_items WHERE item_kind = 'episode' AND org_id IN ({org_ph}))"
+        shared_art_sub = f"a.id IN (SELECT item_id FROM shared_items WHERE item_kind = 'article' AND org_id IN ({org_ph}))"
+        clauses_ep[0] = f"({clauses_ep[0]} OR {shared_ep_sub})"
+        params_ep.extend(effective_orgs)
+        clauses_art[0] = f"({clauses_art[0]} OR {shared_art_sub})"
+        params_art.extend(effective_orgs)
+
     if archived_only:
         clauses_ep.append("uis_e.archived_at IS NOT NULL")
         clauses_art.append("uis_a.archived_at IS NOT NULL")
@@ -304,8 +315,14 @@ def get_unified(
         clauses_ep.append("pf.owner_type = 'user'")
         clauses_art.append("af.owner_type = 'user'")
     elif owner_filter == "org":
-        clauses_ep.append("pf.owner_type = 'org'")
-        clauses_art.append("af.owner_type = 'org'")
+        if shared_ep_sub:
+            clauses_ep.append(f"(pf.owner_type = 'org' OR {shared_ep_sub})")
+            params_ep.extend(effective_orgs)
+            clauses_art.append(f"(af.owner_type = 'org' OR {shared_art_sub})")
+            params_art.extend(effective_orgs)
+        else:
+            clauses_ep.append("pf.owner_type = 'org'")
+            clauses_art.append("af.owner_type = 'org'")
 
     where_ep = " AND ".join(clauses_ep)
     where_art = " AND ".join(clauses_art)

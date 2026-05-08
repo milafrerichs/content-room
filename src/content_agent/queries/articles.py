@@ -93,12 +93,15 @@ def get_unread(conn, limit: int = 20) -> list:
 
 
 def get_by_id(conn, article_id: int, owner: Owner, all_org_ids: Optional[list] = None) -> Optional[dict]:
-    """Fetch an article visible to owner: personal ownership, org-shared feed, or subscription."""
+    """Fetch an article visible to owner: personal ownership, org-shared feed, subscription, or individually shared to org."""
     org_clause = ""
+    shared_clause = ""
     params: list = [article_id, owner.type, owner.id]
     if all_org_ids:
         placeholders = ", ".join(["%s"] * len(all_org_ids))
         org_clause = f"OR (af.owner_type = 'org' AND af.owner_id IN ({placeholders}) AND af.is_shared = TRUE)"
+        params.extend(all_org_ids)
+        shared_clause = f"OR a.id IN (SELECT item_id FROM shared_items WHERE item_kind = 'article' AND org_id IN ({placeholders}))"
         params.extend(all_org_ids)
     params.extend(["user", owner.id, "article"])
     return _fetchone(
@@ -108,6 +111,7 @@ def get_by_id(conn, article_id: int, owner: Owner, all_org_ids: Optional[list] =
            WHERE a.id = %s AND (
                (af.owner_type = %s AND af.owner_id = %s)
                {org_clause}
+               {shared_clause}
                OR af.id IN (
                    SELECT feed_id FROM feed_subscriptions
                    WHERE subscriber_type = %s AND subscriber_id = %s AND feed_type = %s
