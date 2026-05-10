@@ -1,8 +1,81 @@
 {% extends "base.html" %}
 {% block title %}Feed{% endblock %}
 
+{% block head %}
+<style>
+  /* ── Mobile: sidebar forced to icon-only (no localStorage side-effects) ── */
+  @media (max-width: 767px) {
+    #sidebar {
+      width: 3.5rem !important;
+    }
+    #sidebar .nav-label,
+    #sidebar .logo-text,
+    #sidebar .footer-text {
+      display: none !important;
+    }
+    #sidebar nav a {
+      justify-content: center !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+    #sidebar nav {
+      padding-left: 0.25rem !important;
+      padding-right: 0.25rem !important;
+    }
+  }
+
+  /* ── Mobile: larger text + tighter spacing in list view ── */
+  @media (max-width: 767px) {
+    #list-view-section [id^="feed-item-"] {
+      padding-left: 0.75rem !important;
+      padding-right: 0.75rem !important;
+      padding-top: 0.625rem !important;
+      padding-bottom: 0.625rem !important;
+    }
+    #list-view-section [id^="feed-item-"] h3 {
+      font-size: 1rem !important;
+      line-height: 1.5rem !important;
+    }
+    #list-view-section [id^="feed-item-"] p {
+      font-size: 0.875rem !important;
+      line-height: 1.375rem !important;
+    }
+  }
+
+  /* ── Mobile card styles (Card View mode) ── */
+  #mobile-feed .mobile-card { display: none; }
+  #mobile-feed .mobile-card:first-child { display: block; }
+
+  .mobile-card { touch-action: pan-y; }
+
+  .mobile-card .card-content {
+    transition: transform 0.2s ease;
+  }
+  .mobile-card.swiping .card-content {
+    transition: none;
+  }
+  .mobile-card.dismissing {
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+  }
+  .mobile-card.dismissing.dismiss-left {
+    transform: translateX(-120%);
+  }
+  .mobile-card.dismissing.dismiss-right {
+    transform: translateX(120%);
+  }
+  .action-menu-open .action-reveal {
+    pointer-events: auto !important;
+    opacity: 1 !important;
+  }
+  .item-counter {
+    transition: opacity 0.2s ease;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="p-8 fade-in">
+<div class="p-4 md:p-8 fade-in">
 
   <!-- Page header -->
   <div class="flex items-center justify-between mb-6">
@@ -10,252 +83,528 @@
       <div class="mono text-xs text-accent tracking-widest mb-1">TIMELINE</div>
       <h1 class="text-2xl font-semibold text-slate-800">Feed</h1>
     </div>
-    <a href="/feeds"
-       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-surface-200 text-slate-500 text-sm rounded-lg hover:border-surface-300 hover:text-slate-700 transition-colors mono text-xs">
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>
-      </svg>
-      Manage Feeds
-    </a>
-  </div>
-
-  <!-- Filters -->
-  <div class="bg-white border border-surface-200 rounded-xl p-5 mb-6">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
-
-      <!-- Source -->
-      <div>
-        <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">SOURCE</label>
-        <select
-          name="source"
-          hx-get="/feed"
-          hx-target="body"
-          hx-push-url="true"
-          hx-include="[name='search'],[name='view'],[name='category']"
-          class="form-input w-full rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">All sources</option>
-          {% for s in sources %}
-          <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <!-- Search -->
-      <div>
-        <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">SEARCH</label>
-        <div class="relative">
-          <input
-            type="text"
-            name="search"
-            value="{{ filters.search or '' }}"
-            placeholder="Title or description..."
-            class="form-input w-full rounded-lg pl-8 pr-3 py-2 text-sm"
-            hx-get="/feed"
-            hx-target="body"
-            hx-push-url="true"
-            hx-trigger="keyup delay:300ms, change"
-            hx-include="[name='source'],[name='view'],[name='category']"
-          />
-          <svg class="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-        </div>
-      </div>
+    <div class="flex items-center gap-2">
+      <!-- Card View toggle -->
+      <button
+        id="card-view-toggle"
+        onclick="toggleCardView()"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-surface-200 text-slate-500 rounded-lg hover:border-surface-300 hover:text-slate-700 transition-colors mono text-xs"
+        title="Switch to Card View"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        </svg>
+        <span id="card-view-label">Card View</span>
+      </button>
+      <a href="/feeds"
+         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-surface-200 text-slate-500 rounded-lg hover:border-surface-300 hover:text-slate-700 transition-colors mono text-xs">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>
+        </svg>
+        Manage Feeds
+      </a>
     </div>
   </div>
 
-  <!-- Hidden fields to carry current filter state -->
-  <input type="hidden" name="view" value="{{ filters.view }}" />
-  <input type="hidden" name="category" value="{{ filters.category or '' }}" />
-  <input type="hidden" name="owner" value="{{ filters.owner or '' }}" />
-  <input type="hidden" name="kind" value="{{ filters.kind or '' }}" />
+  <!-- ==================== CARD VIEW SECTION ==================== -->
+  <div id="card-view-section" style="display:none;">
+    <div class="max-w-lg mx-auto flex flex-col" style="min-height: 60vh;">
 
-  <!-- Quick filter chips -->
-  {% if user and user.all_org_ids %}
-  <div class="flex flex-wrap items-center gap-2 mb-4">
-    <span class="mono text-xs text-slate-400 mr-1">Source:</span>
-    {% for chip_owner, chip_label in [('', 'All'), ('personal', 'Personal'), ('org', 'Org')] %}
-    <button
-      hx-get="/feed"
-      hx-target="body"
-      hx-push-url="true"
-      hx-include="[name='source'],[name='search'],[name='view'],[name='category'],[name='kind']"
-      hx-vals='{"owner": "{{ chip_owner }}"}'
-      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
-        {% if filters.owner == chip_owner or (not filters.owner and chip_owner == '') %}
-          {% if chip_owner == 'org' %}bg-purple-600 text-white border-purple-600
-          {% else %}bg-accent text-white border-accent{% endif %}
-        {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
-    >{{ chip_label }}</button>
-    {% endfor %}
+      <div class="flex items-center justify-between mb-4">
+        <p class="mono text-xs text-slate-400">← Read Later &nbsp;·&nbsp; Actions →</p>
+        <span id="item-counter" class="item-counter mono text-xs text-slate-400">
+          {% if items %}1 / {{ items|length }}{% endif %}
+        </span>
+      </div>
 
-    <span class="w-px h-4 bg-surface-200 mx-1"></span>
-    <span class="mono text-xs text-slate-400 mr-1">Type:</span>
-    {% for chip_kind, chip_label in [('', 'All'), ('episode', 'Episodes'), ('article', 'Articles')] %}
-    <button
-      hx-get="/feed"
-      hx-target="body"
-      hx-push-url="true"
-      hx-include="[name='source'],[name='search'],[name='view'],[name='category'],[name='owner']"
-      hx-vals='{"kind": "{{ chip_kind }}"}'
-      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
-        {% if filters.kind == chip_kind or (not filters.kind and chip_kind == '') %}bg-accent text-white border-accent
-        {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
-    >{{ chip_label }}</button>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="flex flex-wrap items-center gap-2 mb-4">
-    <span class="mono text-xs text-slate-400 mr-1">Type:</span>
-    {% for chip_kind, chip_label in [('', 'All'), ('episode', 'Episodes'), ('article', 'Articles')] %}
-    <button
-      hx-get="/feed"
-      hx-target="body"
-      hx-push-url="true"
-      hx-include="[name='source'],[name='search'],[name='view'],[name='category']"
-      hx-vals='{"kind": "{{ chip_kind }}"}'
-      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
-        {% if filters.kind == chip_kind or (not filters.kind and chip_kind == '') %}bg-accent text-white border-accent
-        {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
-    >{{ chip_label }}</button>
-    {% endfor %}
-  </div>
-  {% endif %}
+      {% if items %}
+      <div id="mobile-feed" class="flex-1 flex flex-col" data-total="{{ items|length }}">
+        {% for item in items %}
+        {% include "feed/_mobile_card.html" %}
+        {% endfor %}
+      </div>
 
-  <!-- Tab bar -->
-  <div class="flex items-center gap-1 mb-6 bg-white border border-surface-200 rounded-xl p-1">
-    <button
-      hx-get="/feed"
-      hx-target="body"
-      hx-push-url="true"
-      hx-include="[name='source'],[name='search']"
-      hx-vals='{"view": "timeline"}'
-      class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-        {% if filters.view == 'timeline' %}bg-accent text-white{% else %}text-slate-500 hover:bg-surface-50 hover:text-slate-700{% endif %}"
-    >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-      </svg>
-      By Day
-    </button>
-    <button
-      hx-get="/feed"
-      hx-target="body"
-      hx-push-url="true"
-      hx-include="[name='source'],[name='search']"
-      hx-vals='{"view": "category"}'
-      class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-        {% if filters.view == 'category' %}bg-accent text-white{% else %}text-slate-500 hover:bg-surface-50 hover:text-slate-700{% endif %}"
-    >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
-      </svg>
-      By Category
-    </button>
-  </div>
-
-  {% if filters.view == 'category' %}
-  <!-- ==================== CATEGORY VIEW ==================== -->
-
-  {% if categories %}
-  <!-- Category filter pills -->
-  <div class="flex flex-wrap items-center gap-2 mb-6">
-    <button
-      hx-get="/feed"
-      hx-target="body"
-      hx-push-url="true"
-      hx-include="[name='source'],[name='search']"
-      hx-vals='{"view": "category"}'
-      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
-        {% if not filters.category %}bg-accent text-white border-accent{% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300{% endif %}"
-    >All</button>
-    {% for cat in categories %}
-    <button
-      hx-get="/feed"
-      hx-target="body"
-      hx-push-url="true"
-      hx-include="[name='source'],[name='search']"
-      hx-vals='{"view": "category", "category": "{{ cat }}"}'
-      class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
-        {% if filters.category == cat %}bg-accent text-white border-accent{% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300{% endif %}"
-    >{{ cat }}</button>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if sorted_categories %}
-  <div class="space-y-4">
-    {% for cat in sorted_categories %}
-    <details class="bg-white border border-surface-200 rounded-xl overflow-hidden group" open>
-      <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-50 transition-colors select-none">
-        <div class="flex items-center gap-3">
-          {% if cat %}
-          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-accent-light text-accent-text border border-accent/20">
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+      <!-- All caught up state -->
+      <div id="mobile-empty" class="flex-col items-center justify-center hidden">
+        <div class="bg-white border border-surface-200 rounded-xl p-12 text-center">
+          <div class="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
             </svg>
-            {{ cat }}
-          </span>
-          {% else %}
-          <div class="mono text-sm font-medium text-slate-400">Uncategorized</div>
-          {% endif %}
-          <span class="mono text-xs text-slate-400 bg-surface-100 border border-surface-200 rounded-full px-2 py-0.5">
-            {{ by_category[cat] | length }}
-          </span>
-        </div>
-        <svg class="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-        </svg>
-      </summary>
-
-      <div class="border-t border-surface-200 divide-y divide-surface-100">
-        {% for item in by_category[cat] %}
-        {% include "feed/_feed_item.html" %}
-        {% endfor %}
-      </div>
-    </details>
-    {% endfor %}
-  </div>
-  {% else %}
-  {% include "feed/_empty_feed.html" %}
-  {% endif %}
-
-  {% else %}
-  <!-- ==================== TIMELINE VIEW (default) ==================== -->
-
-  {% if sorted_days %}
-  <div class="space-y-4">
-    {% for day in sorted_days %}
-    {% set is_today = (day == today) %}
-    <details class="bg-white border border-surface-200 rounded-xl overflow-hidden group" {% if is_today %}open{% endif %}>
-      <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-50 transition-colors select-none">
-        <div class="flex items-center gap-3">
-          <div class="mono text-sm font-medium {% if is_today %}text-accent{% else %}text-slate-600{% endif %}">
-            {% if is_today %}Today{% else %}{{ day }}{% endif %}
           </div>
-          <span class="mono text-xs text-slate-400 bg-surface-100 border border-surface-200 rounded-full px-2 py-0.5">
-            {{ grouped[day] | length }}
-          </span>
+          <p class="text-slate-500 font-medium">All caught up!</p>
+          <p class="text-slate-400 text-sm mt-1">You've gone through all items.</p>
+          <button onclick="toggleCardView()" class="inline-block mt-4 px-4 py-2 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent-text transition-colors mono">
+            Back to List
+          </button>
         </div>
-        <svg class="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-        </svg>
-      </summary>
-
-      <div class="border-t border-surface-200 divide-y divide-surface-100">
-        {% for item in grouped[day] %}
-        {% include "feed/_feed_item.html" %}
-        {% endfor %}
       </div>
-    </details>
-    {% endfor %}
-  </div>
-  {% else %}
-  {% include "feed/_empty_feed.html" %}
-  {% endif %}
+      {% else %}
+      <div class="flex flex-col items-center justify-center flex-1">
+        <div class="bg-white border border-surface-200 rounded-xl p-12 text-center">
+          <div class="w-12 h-12 rounded-full bg-surface-100 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 110-2 1 1 0 010 2z"/>
+            </svg>
+          </div>
+          <p class="text-slate-500 font-medium">No items found</p>
+          <p class="text-slate-400 text-sm mt-1">Feed items will appear here once discovered.</p>
+        </div>
+      </div>
+      {% endif %}
 
-  {% endif %}
+    </div>
+  </div>
+
+  <!-- ==================== LIST VIEW SECTION ==================== -->
+  <div id="list-view-section">
+
+    <!-- Filters -->
+    <div class="bg-white border border-surface-200 rounded-xl p-5 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+
+        <!-- Source -->
+        <div>
+          <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">SOURCE</label>
+          <select
+            name="source"
+            hx-get="/feed"
+            hx-target="body"
+            hx-push-url="true"
+            hx-include="[name='search'],[name='view'],[name='category']"
+            class="form-input w-full rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">All sources</option>
+            {% for s in sources %}
+            <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Search -->
+        <div>
+          <label class="block mono text-xs text-slate-400 tracking-wider mb-1.5">SEARCH</label>
+          <div class="relative">
+            <input
+              type="text"
+              name="search"
+              value="{{ filters.search or '' }}"
+              placeholder="Title or description..."
+              class="form-input w-full rounded-lg pl-8 pr-3 py-2 text-sm"
+              hx-get="/feed"
+              hx-target="body"
+              hx-push-url="true"
+              hx-trigger="keyup delay:300ms, change"
+              hx-include="[name='source'],[name='view'],[name='category']"
+            />
+            <svg class="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden fields to carry current filter state -->
+    <input type="hidden" name="view" value="{{ filters.view }}" />
+    <input type="hidden" name="category" value="{{ filters.category or '' }}" />
+    <input type="hidden" name="owner" value="{{ filters.owner or '' }}" />
+    <input type="hidden" name="kind" value="{{ filters.kind or '' }}" />
+
+    <!-- Quick filter chips -->
+    {% if user and user.all_org_ids %}
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <span class="mono text-xs text-slate-400 mr-1">Source:</span>
+      {% for chip_owner, chip_label in [('', 'All'), ('personal', 'Personal'), ('org', 'Org')] %}
+      <button
+        hx-get="/feed"
+        hx-target="body"
+        hx-push-url="true"
+        hx-include="[name='source'],[name='search'],[name='view'],[name='category'],[name='kind']"
+        hx-vals='{"owner": "{{ chip_owner }}"}'
+        class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+          {% if filters.owner == chip_owner or (not filters.owner and chip_owner == '') %}
+            {% if chip_owner == 'org' %}bg-purple-600 text-white border-purple-600
+            {% else %}bg-accent text-white border-accent{% endif %}
+          {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
+      >{{ chip_label }}</button>
+      {% endfor %}
+
+      <span class="w-px h-4 bg-surface-200 mx-1"></span>
+      <span class="mono text-xs text-slate-400 mr-1">Type:</span>
+      {% for chip_kind, chip_label in [('', 'All'), ('episode', 'Episodes'), ('article', 'Articles')] %}
+      <button
+        hx-get="/feed"
+        hx-target="body"
+        hx-push-url="true"
+        hx-include="[name='source'],[name='search'],[name='view'],[name='category'],[name='owner']"
+        hx-vals='{"kind": "{{ chip_kind }}"}'
+        class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+          {% if filters.kind == chip_kind or (not filters.kind and chip_kind == '') %}bg-accent text-white border-accent
+          {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
+      >{{ chip_label }}</button>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <span class="mono text-xs text-slate-400 mr-1">Type:</span>
+      {% for chip_kind, chip_label in [('', 'All'), ('episode', 'Episodes'), ('article', 'Articles')] %}
+      <button
+        hx-get="/feed"
+        hx-target="body"
+        hx-push-url="true"
+        hx-include="[name='source'],[name='search'],[name='view'],[name='category']"
+        hx-vals='{"kind": "{{ chip_kind }}"}'
+        class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+          {% if filters.kind == chip_kind or (not filters.kind and chip_kind == '') %}bg-accent text-white border-accent
+          {% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300 hover:text-slate-700{% endif %}"
+      >{{ chip_label }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Tab bar -->
+    <div class="flex items-center gap-1 mb-6 bg-white border border-surface-200 rounded-xl p-1">
+      <button
+        hx-get="/feed"
+        hx-target="body"
+        hx-push-url="true"
+        hx-include="[name='source'],[name='search']"
+        hx-vals='{"view": "timeline"}'
+        class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+          {% if filters.view == 'timeline' %}bg-accent text-white{% else %}text-slate-500 hover:bg-surface-50 hover:text-slate-700{% endif %}"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
+        By Day
+      </button>
+      <button
+        hx-get="/feed"
+        hx-target="body"
+        hx-push-url="true"
+        hx-include="[name='source'],[name='search']"
+        hx-vals='{"view": "category"}'
+        class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+          {% if filters.view == 'category' %}bg-accent text-white{% else %}text-slate-500 hover:bg-surface-50 hover:text-slate-700{% endif %}"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+        </svg>
+        By Category
+      </button>
+    </div>
+
+    {% if filters.view == 'category' %}
+    <!-- ==================== CATEGORY VIEW ==================== -->
+
+    {% if categories %}
+    <!-- Category filter pills -->
+    <div class="flex flex-wrap items-center gap-2 mb-6">
+      <button
+        hx-get="/feed"
+        hx-target="body"
+        hx-push-url="true"
+        hx-include="[name='source'],[name='search']"
+        hx-vals='{"view": "category"}'
+        class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+          {% if not filters.category %}bg-accent text-white border-accent{% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300{% endif %}"
+      >All</button>
+      {% for cat in categories %}
+      <button
+        hx-get="/feed"
+        hx-target="body"
+        hx-push-url="true"
+        hx-include="[name='source'],[name='search']"
+        hx-vals='{"view": "category", "category": "{{ cat }}"}'
+        class="px-3 py-1 rounded-full text-xs font-medium border transition-colors
+          {% if filters.category == cat %}bg-accent text-white border-accent{% else %}bg-white text-slate-500 border-surface-200 hover:border-surface-300{% endif %}"
+      >{{ cat }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if sorted_categories %}
+    <div class="space-y-4">
+      {% for cat in sorted_categories %}
+      <details class="bg-white border border-surface-200 rounded-xl overflow-hidden group" open>
+        <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-50 transition-colors select-none">
+          <div class="flex items-center gap-3">
+            {% if cat %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-accent-light text-accent-text border border-accent/20">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+              </svg>
+              {{ cat }}
+            </span>
+            {% else %}
+            <div class="mono text-sm font-medium text-slate-400">Uncategorized</div>
+            {% endif %}
+            <span class="mono text-xs text-slate-400 bg-surface-100 border border-surface-200 rounded-full px-2 py-0.5">
+              {{ by_category[cat] | length }}
+            </span>
+          </div>
+          <svg class="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </summary>
+
+        <div class="border-t border-surface-200 divide-y divide-surface-100">
+          {% for item in by_category[cat] %}
+          {% include "feed/_feed_item.html" %}
+          {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    {% else %}
+    {% include "feed/_empty_feed.html" %}
+    {% endif %}
+
+    {% else %}
+    <!-- ==================== TIMELINE VIEW (default) ==================== -->
+
+    {% if sorted_days %}
+    <div class="space-y-4">
+      {% for day in sorted_days %}
+      {% set is_today = (day == today) %}
+      <details class="bg-white border border-surface-200 rounded-xl overflow-hidden group" {% if is_today %}open{% endif %}>
+        <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-50 transition-colors select-none">
+          <div class="flex items-center gap-3">
+            <div class="mono text-sm font-medium {% if is_today %}text-accent{% else %}text-slate-600{% endif %}">
+              {% if is_today %}Today{% else %}{{ day }}{% endif %}
+            </div>
+            <span class="mono text-xs text-slate-400 bg-surface-100 border border-surface-200 rounded-full px-2 py-0.5">
+              {{ grouped[day] | length }}
+            </span>
+          </div>
+          <svg class="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </summary>
+
+        <div class="border-t border-surface-200 divide-y divide-surface-100">
+          {% for item in grouped[day] %}
+          {% include "feed/_feed_item.html" %}
+          {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    {% else %}
+    {% include "feed/_empty_feed.html" %}
+    {% endif %}
+
+    {% endif %}
+
+  </div><!-- #list-view-section -->
 
 </div>
+
+<script>
+  // ── Card View toggle ──────────────────────────────────────────────────
+  var CARD_VIEW_KEY = 'feed-card-view';
+
+  function toggleCardView() {
+    var listSection = document.getElementById('list-view-section');
+    var cardSection = document.getElementById('card-view-section');
+    var label = document.getElementById('card-view-label');
+    var isCardActive = cardSection.style.display !== 'none';
+
+    if (isCardActive) {
+      cardSection.style.display = 'none';
+      listSection.style.display = '';
+      label.textContent = 'Card View';
+      localStorage.setItem(CARD_VIEW_KEY, 'false');
+    } else {
+      listSection.style.display = 'none';
+      cardSection.style.display = '';
+      label.textContent = 'List View';
+      localStorage.setItem(CARD_VIEW_KEY, 'true');
+    }
+  }
+
+  // Restore saved mode on page load
+  (function() {
+    if (localStorage.getItem(CARD_VIEW_KEY) === 'true') {
+      var listSection = document.getElementById('list-view-section');
+      var cardSection = document.getElementById('card-view-section');
+      var label = document.getElementById('card-view-label');
+      if (listSection) listSection.style.display = 'none';
+      if (cardSection) cardSection.style.display = '';
+      if (label) label.textContent = 'List View';
+    }
+  })();
+
+  // ── Swipe gesture JS (mirrors mobile.html) ────────────────────────────
+  (function() {
+    var THRESHOLD = 60;
+    var MAX_SLIDE = 120;
+    var startX, startY, currentCard, cardContent, deltaX, isHorizontal;
+
+    function getContainer() {
+      return document.getElementById('mobile-feed');
+    }
+
+    function getTotalCount() {
+      var container = getContainer();
+      return container ? parseInt(container.dataset.total, 10) : 0;
+    }
+
+    function updateCounter() {
+      var counter = document.getElementById('item-counter');
+      if (!counter) return;
+      var container = getContainer();
+      if (!container) return;
+      var remaining = container.querySelectorAll('.mobile-card').length;
+      if (remaining === 0) {
+        counter.textContent = '';
+      } else {
+        var total = getTotalCount();
+        counter.textContent = (total - remaining + 1) + ' / ' + total;
+      }
+    }
+
+    function showEmptyIfDone() {
+      var container = getContainer();
+      if (!container) return;
+      var remaining = container.querySelectorAll('.mobile-card').length;
+      if (remaining === 0) {
+        var emptyEl = document.getElementById('mobile-empty');
+        if (emptyEl) {
+          emptyEl.classList.remove('hidden');
+          emptyEl.classList.add('flex');
+        }
+        container.style.display = 'none';
+      }
+    }
+
+    function dismissCard(card, direction, callback) {
+      card.classList.add('dismissing', direction === 'left' ? 'dismiss-left' : 'dismiss-right');
+      setTimeout(function() {
+        card.remove();
+        updateCounter();
+        showEmptyIfDone();
+        if (callback) callback();
+      }, 300);
+    }
+
+    function closeActionMenu(card) {
+      card.classList.remove('action-menu-open');
+      var content = card.querySelector('.card-content');
+      content.style.transform = '';
+      card.querySelector('.action-reveal').style.opacity = 0;
+    }
+
+    function snapBack() {
+      if (!currentCard) return;
+      cardContent.style.transform = '';
+      currentCard.querySelector('.read-later-reveal').style.opacity = 0;
+      currentCard.querySelector('.action-reveal').style.opacity = 0;
+    }
+
+    function onTouchStart(e) {
+      var openCard = document.querySelector('.action-menu-open');
+      if (openCard && !openCard.contains(e.target)) {
+        closeActionMenu(openCard);
+      }
+      var card = e.target.closest('.mobile-card');
+      if (!card) return;
+      currentCard = card;
+      cardContent = card.querySelector('.card-content');
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      deltaX = 0;
+      isHorizontal = null;
+      card.classList.add('swiping');
+    }
+
+    function onTouchMove(e) {
+      if (!currentCard) return;
+      var dx = e.touches[0].clientX - startX;
+      var dy = e.touches[0].clientY - startY;
+      if (isHorizontal === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+        isHorizontal = Math.abs(dx) > Math.abs(dy);
+      }
+      if (!isHorizontal) return;
+      e.preventDefault();
+      deltaX = Math.max(-MAX_SLIDE, Math.min(MAX_SLIDE, dx));
+      cardContent.style.transform = 'translateX(' + deltaX + 'px)';
+      var leftReveal = currentCard.querySelector('.read-later-reveal');
+      var rightReveal = currentCard.querySelector('.action-reveal');
+      leftReveal.style.opacity = deltaX < -20 ? Math.min(1, (-deltaX - 20) / 40) : 0;
+      rightReveal.style.opacity = deltaX > 20 ? Math.min(1, (deltaX - 20) / 40) : 0;
+    }
+
+    function onTouchEnd() {
+      if (!currentCard || !isHorizontal) {
+        if (currentCard) currentCard.classList.remove('swiping');
+        currentCard = null;
+        return;
+      }
+      currentCard.classList.remove('swiping');
+      if (deltaX < -THRESHOLD) {
+        var card = currentCard;
+        var kind = card.dataset.kind;
+        var id = card.dataset.id;
+        fetch('/feed/' + kind + '/' + id + '/read-later', {method: 'POST'});
+        dismissCard(card, 'left');
+      } else if (deltaX > THRESHOLD) {
+        cardContent.style.transform = 'translateX(' + MAX_SLIDE + 'px)';
+        currentCard.classList.add('action-menu-open');
+        currentCard = null;
+        return;
+      } else {
+        snapBack();
+      }
+      currentCard = null;
+    }
+
+    // Scope touch events to the mobile-feed container
+    document.addEventListener('touchstart', function(e) {
+      var container = getContainer();
+      if (container && container.contains(e.target)) onTouchStart(e);
+    }, {passive: true});
+
+    document.addEventListener('touchmove', function(e) {
+      var container = getContainer();
+      if (container && container.contains(e.target)) onTouchMove(e);
+    }, {passive: false});
+
+    document.addEventListener('touchend', function() {
+      onTouchEnd();
+    });
+
+    // Close action menu on outside click
+    document.addEventListener('click', function(e) {
+      var openCard = document.querySelector('.action-menu-open');
+      if (openCard && !openCard.contains(e.target)) {
+        closeActionMenu(openCard);
+      }
+    });
+
+    // Card action buttons
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      var card = btn.closest('.mobile-card');
+      if (!card) return;
+      var action = btn.dataset.action;
+      var direction = btn.dataset.dismiss || 'right';
+      var kind = card.dataset.kind;
+      var id = card.dataset.id;
+      if (action === 'delete') {
+        if (!confirm('Delete this item?')) return;
+        fetch('/feed/' + kind + '/' + id, {method: 'DELETE'});
+        dismissCard(card, direction);
+      } else if (action === 'archive') {
+        fetch('/feed/' + kind + '/' + id + '/archive', {method: 'POST'});
+        dismissCard(card, direction);
+      } else if (action === 'read-later') {
+        fetch('/feed/' + kind + '/' + id + '/read-later', {method: 'POST'});
+        dismissCard(card, 'left');
+      }
+    });
+  })();
+</script>
 {% endblock %}
