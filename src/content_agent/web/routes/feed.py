@@ -131,6 +131,7 @@ def feed_page(
         {
             "request": request,
             "user": user,
+            "items": items,
             "grouped": by_day,
             "sorted_days": sorted_days,
             "today": today,
